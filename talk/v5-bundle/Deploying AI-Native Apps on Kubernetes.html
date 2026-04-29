@@ -48,7 +48,7 @@
 "Demo en vivo. Tres cosas van a ver. Una, el frontend — subo un pasaporte, el JSON aparece. Dos, kubectl get inferenceservice y los pods asociados, para que vean lo que KServe creó debajo. Tres, kubectl logs del pod de vLLM en tiempo real, para ver la inferencia ocurriendo.",
 "Lo que vieron. KServe orquestó la request — desde el ingress hasta el pod. vLLM corrió Qwen3-VL en la GPU, en una request de inferencia normal. Y la MRZ validó deterministicamente los campos críticos, dándonos un guardrail encima del modelo. Tres capas: framework, runtime, validación. Cada una con su responsabilidad clara.",
 "El takeaway. KServe es la solución de facto para servir modelos de AI en Kubernetes. El framework hace el grueso del trabajo de serving — deployments, scaling, routing, abstracciones de storage. Las decisiones de stack — qué runtime, qué image tag, qué strategy — las tomás vos, sabiendo que existen. La frontera es clara y conocerla es lo que separa un deploy que funciona de uno que rompe a las dos semanas.",
-"Recursos. Repo en github.com/jeffincloud — manifests, charts, scripts de provisioning, y esta presentación. Para preguntas: jeffincloud en GitHub, jeffry-hernandez en LinkedIn. Gracias."
+"Recursos. Repo en github.com/jeffincloud/ocr-lab — manifests, charts, scripts de provisioning, y esta presentación. Para preguntas: jeffincloud en GitHub, jeffry-hernandez en LinkedIn. Gracias."
 ]</script>
 </head>
 <body>
@@ -1275,7 +1275,7 @@ OPENAI_BASE_URL = os.getenv(<span class="str">"OPENAI_BASE_URL"</span>,
       <div>
         <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF; margin-bottom: 18px;">CÓDIGO &amp; SLIDES</div>
         <div style="font-family: Consolas, Menlo, monospace; font-size: 28px; line-height: 1.8;">
-          github.com/<b>jeffincloud</b>
+          github.com/jeffincloud/<b>ocr-lab</b>
         </div>
         <div style="font-size: 22px; color: #555; line-height: 1.6; margin-top: 18px;">
           Manifests · charts de Helm · scripts de provisioning · esta presentación.
