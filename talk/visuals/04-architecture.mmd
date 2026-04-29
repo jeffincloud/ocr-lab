@@ -1,0 +1,32 @@
+%% Renderizá esto en https://mermaid.live o pegalo en Excalidraw (soporta Mermaid).
+%% Estilo dark, acentos azul/verde para enfatizar el path de inference.
+
+flowchart LR
+    User([👤 Usuario])
+    subgraph Cluster["K3s · TensorDock RTX 4090"]
+        direction LR
+        Ingress["🚦 Traefik Ingress<br/>:80"]
+        Frontend["🖥️ Frontend<br/>nginx + vanilla JS"]
+        API["⚙️ API<br/>FastAPI · OCR_BACKEND=openai"]
+        subgraph KServe["KServe · RawDeployment"]
+            direction TB
+            ISVC["📦 InferenceService<br/>qwen3-vl-4b"]
+            Predictor["🧠 Predictor pod<br/>vllm/vllm-openai:v0.11.0<br/>Qwen3-VL-4B-Instruct · FP16"]
+        end
+    end
+
+    User -->|HTTP| Ingress
+    Ingress -->|/| Frontend
+    Frontend -->|/api/*| API
+    API -->|POST /v1/chat/completions| ISVC
+    ISVC --> Predictor
+    Predictor -.->|JSON| API
+    API -.->|JSON| Frontend
+    Frontend -.->|render| User
+
+    classDef inference fill:#2563EB,stroke:#1E40AF,color:#fff,stroke-width:2px
+    classDef infra fill:#1F2937,stroke:#4B5563,color:#E5E7EB
+    classDef edge fill:#84CC16,stroke:#65A30D,color:#000
+    class Predictor,ISVC inference
+    class Frontend,API infra
+    class Ingress edge

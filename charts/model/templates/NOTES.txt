@@ -1,0 +1,18 @@
+{{ .Values.model.servedName }} is being deployed.
+
+Watch readiness:
+  kubectl get inferenceservice {{ .Values.model.servedName }} -n {{ .Release.Namespace }} -w
+
+⚠ Single-GPU rollout note
+  KServe v0.14 creates the predictor Deployment with RollingUpdate. With one
+  GPU, a new pod can't surge — old must die first. After the first install,
+  patch the strategy once:
+
+    kubectl patch deployment {{ .Values.model.servedName }}-predictor \
+      -n {{ .Release.Namespace }} --type=strategic \
+      -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+
+Smoke-test the OpenAI-compatible API:
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ .Values.model.servedName }}-predictor 18080:80 &
+  curl http://localhost:18080/v1/models

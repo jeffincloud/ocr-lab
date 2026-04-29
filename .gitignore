@@ -1,0 +1,67 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+terraform.tfvars
+*.auto.tfvars
+*.auto.tfvars.json
+
+# Secrets — block anything that looks like a credential
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!Chart.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+kubeconfig
+kubeconfig.*
+gcp-sa-*.json
+service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Claude Code local state
+.claude/
+
+# Talk export artifacts (regenerable)
+talk/_render/
+talk/__pycache__/
+
+# Test fixtures — passport images (PII hygiene, even specimens)
+tests/fixtures/passports/*.png
+tests/fixtures/passports/*.jpg
+tests/fixtures/passports/*.jpeg
+tests/fixtures/passports/*.pdf
+!tests/fixtures/passports/.gitkeep
+
+# Misc local
+local_setup
+*.log

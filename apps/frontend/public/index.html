@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Passport OCR</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>Passport OCR</h1>
+      <p class="subtitle">Upload a passport image to extract its fields.</p>
+    </header>
+
+    <section class="card">
+      <label for="fileInput" class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept="image/png,image/jpeg" hidden />
+        <div class="dropzone-content" id="dropzoneEmpty">
+          <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M4 4h11l5 5v11a0 0 0 01 0 0H4z"/>
+            <path d="M15 4v5h5"/>
+            <path d="M12 12v6M9 15l3-3 3 3" stroke-linecap="round"/>
+          </svg>
+          <span>Drop an image here or click to select</span>
+          <span class="hint">PNG or JPEG, up to ~10 MB</span>
+        </div>
+        <img id="preview" alt="" hidden />
+      </label>
+
+      <div class="actions">
+        <button id="extractBtn" class="primary" disabled>Extract</button>
+        <button id="resetBtn" class="ghost" hidden>Reset</button>
+      </div>
+    </section>
+
+    <section class="card results" id="results" hidden>
+      <div class="spinner" id="spinner" hidden>
+        <div class="spinner-dot"></div>
+        <span>Calling the model…</span>
+      </div>
+      <div class="error" id="error" hidden></div>
+      <div id="output" hidden>
+        <div class="fields-grid" id="fieldsCard"></div>
+        <details class="raw-json">
+          <summary>Raw response</summary>
+          <pre id="rawJson"></pre>
+        </details>
+      </div>
+    </section>
+
+    <footer>
+      <span id="apiBadge"></span>
+    </footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

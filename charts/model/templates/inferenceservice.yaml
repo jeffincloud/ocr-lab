@@ -1,0 +1,14 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: {{ .Values.model.servedName }}
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+spec:
+  predictor:
+    runtimeClassName: {{ .Values.runtimeClassName }}
+    model:
+      modelFormat:
+        name: huggingface
+      runtime: {{ .Values.runtime.name }}

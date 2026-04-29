@@ -1,0 +1,25 @@
+# Lo que pasa al usar `vllm/vllm-openai:latest` con driver 570.144 (CUDA 12.8):
+
+$ kubectl logs qwen3-vl-4b-predictor-...
+
+(EngineCore pid=77)   File ".../vllm/v1/worker/gpu_worker.py", line 255, in init_device
+(EngineCore pid=77)     torch.accelerator.set_device_index(self.device)
+(EngineCore pid=77)   File ".../torch/cuda/__init__.py", line 424, in _lazy_init
+(EngineCore pid=77)     torch._C._cuda_init()
+(EngineCore pid=77)
+(EngineCore pid=77) RuntimeError: Unexpected error from cudaGetDeviceCount().
+(EngineCore pid=77) Error 804: forward compatibility was attempted on non supported HW
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+(APIServer pid=1) RuntimeError: Engine core initialization failed.
+(APIServer pid=1) See root cause above. Failed core proc(s): {}
+
+
+# Traducción:
+#
+#   - El container ships CUDA 13 toolkit
+#   - El host driver es 570.144 → CUDA 12.8
+#   - CUDA forward-compat existe PERO solo para datacenter GPUs (H100/A100/L40S)
+#   - RTX 4090 es consumer Ada → forward-compat se rehúsa → libcuda explota
+#
+# Solución: pin de la imagen a la última build con CUDA 12.x → vllm/vllm-openai:v0.11.0

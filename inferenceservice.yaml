@@ -1,0 +1,14 @@
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen3-vl-4b
+  namespace: default
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+spec:
+  predictor:
+    runtimeClassName: nvidia
+    model:
+      modelFormat:
+        name: huggingface
+      runtime: vllm-qwen-vl

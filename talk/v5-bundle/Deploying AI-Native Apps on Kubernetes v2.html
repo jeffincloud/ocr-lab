@@ -1,0 +1,1389 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Deploying AI-Native Apps on Kubernetes — CNCG Cali</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="deck-stage.js"></script>
+<script type="application/json" id="speaker-notes">[
+"Hola a todos, soy Jeffry. Antes de arrancar — esta charla no es un sales deck de KServe ni de vLLM. Es la historia honesta de tres días tratando de levantar una InferenceService en mi propio cluster, con cuatro cicatrices al final. Si conocen Kubernetes pero no AI/ML, esta charla es para ustedes. Vamos a hablar de pins, drivers, GPUs, y por qué el 80% del trabajo lo hace el framework — pero el 20% restante lo ponen ustedes a mano.",
+"Soy Jeffry Hernandez, Senior SRE en Wizeline. Llevo años en infra cloud-native — Kubernetes, observabilidad, plataforma. Lo de AI lo arranqué hace pocos meses, como un side project. Si quieren conectar después: GitHub jeffincloud, LinkedIn ahí abajo. Todo el código de esta charla está en mi repo, lo enlazamos al final.",
+"El pitch que me hice a mí mismo, hace tres meses: 'voy a levantar un demo de OCR con un modelo open-source en mi propio cluster — una InferenceService y listo'. Ingenuo. Spoiler: tres días después tenía cuatro cicatrices. GPU quota cerrada en todos los clouds, kernel pin del host, vLLM pinneado a una versión específica, y un webhook huérfano de KServe. Esta charla es lo que aprendí.",
+"Primera sección: WHY. Por qué Kubernetes para apps AI-native, qué constraints elegí, y la diferencia entre la promesa y la realidad. Voy a ser breve aquí — el meat está en el HOW.",
+"Lo que te vende internet versus lo que realmente pasa. Izquierda: KServe + vLLM = production-ready en cinco minutos. Derecha: cuatro cicatrices reales que vamos a ver una por una en su contexto. La doc oficial es excelente, pero asume tres cosas — cluster sano, driver alineado con CUDA, modelo entra en VRAM. Esos tres asumes son tres días si no los tenés.",
+"Por qué Kubernetes para AI. La respuesta corta: porque ya lo conocés. Tres razones reales. Uno, los modelos son binarios pesados que querés versionar como cualquier otro deploy. Dos, las cargas AI son spiky — una GPU al 100% por 10 segundos y luego nada — exactamente lo que el autoscaling de K8s sabe manejar. Tres, las primitivas que ya usás — Helm, ConfigMaps, Secrets, ingress — sirven igual para servir un LLM. No hay magia debajo, solo más YAML.",
+"Las constraints que elegí — y son importantes porque definen toda la arquitectura. Un nodo, un dev, un GPU, presupuesto de cuatro dólares al mes. Esto no es producción de Netflix. Es lo que un solo ingeniero puede sostener en su tiempo libre. Si tu situación es diferente — cluster multi-nodo, multi-GPU, multi-tenant — algunas decisiones cambian, pero la lógica del razonamiento es la misma.",
+"Quantization en una slide. La precisión numérica es la palanca más grande para meter un modelo en una GPU consumer. FP32 es el default académico — 4 bytes por peso, calidad máxima. FP16 corta el modelo a la mitad con pérdida de calidad casi imperceptible para inference. INT8 lo divide en cuatro y se nota, pero acelera. INT4 es agresivo — entran modelos enormes en GPUs chicas, pero la calidad se degrada. Qwen3-VL-4B en FP32 son 16 gigas, en FP16 son 8 gigas — entra cómodo en la 4090 con margen para el KV cache. Quantization no es opcional cuando tu GPU no es H100.",
+"Sección dos: WHAT. Qué fueron las piezas que elegí, y por qué. Voy a pasar rápido por cada componente — lo importante es que vean cómo encajan.",
+"El stack de un vistazo. K3s abajo como kube. NVIDIA Device Plugin para exponer la GPU al cluster. cert-manager porque KServe lo necesita. KServe en modo RawDeployment — sin Knative. vLLM como inference server. Qwen3-VL-4B como modelo. Y arriba, tres charts de Helm: el modelo, una API en FastAPI, y un frontend nginx. Todo en un solo nodo TensorDock con una RTX 4090.",
+"K3s. Por qué K3s y no kubeadm o k0s o minikube. Una razón: un binario, 50 megas, install en sesenta segundos, sin componentes que no uso. Para un nodo, K3s es el sweet spot. Trae Traefik, ServiceLB y local-path-provisioner por default — todo lo que necesito sin instalar nada extra. La versión 1.34 ya soporta los CRDs que KServe v0.14 espera.",
+"KServe. Acá es donde entra el adulto en la sala. KServe abstrae 'esto es un modelo, dale una URL'. Te da escalado, routing, canary, transformers, predictors. La InferenceService es un CRD que esconde Deployment, Service, HPA, Ingress detrás de un solo manifest. El 80% del trabajo de serving lo hace KServe. El otro 20% — los pins, los drivers — lo ponés vos. Esto es importante: KServe no te falla, vos no conocés tu stack.",
+"El modelo mental de KServe. Cinco componentes que vale la pena tener en la cabeza. InferenceService es el CR de alto nivel — vos decís 'quiero servir este modelo'. ServingRuntime es cómo se sirve — el container, los args, las env vars. Predictor es el componente que predice — el pod que corre vLLM. Transformer es opcional — pre o post-procesado, por ejemplo tokenización custom. Explainer también opcional — explicabilidad. La idea importante: vos declarás el qué, KServe arma el cómo. Cada uno escala independiente.",
+"vLLM. El motor de inferencia. PagedAttention, batching continuo, soporte OpenAI-compatible API. Si están sirviendo un LLM hoy y no es vLLM, probablemente deberían serlo. La trampa: la imagen vllm/vllm-openai latest se mueve rápido y rompe compatibilidad con CUDA. Más sobre esto cuando lleguemos al manifest, en la sección HOW.",
+"Qwen3-VL-4B-Instruct. Por qué este modelo. Cuatro mil millones de parámetros — entra en 24 gigas de VRAM en FP16 con margen. Vision-language — sirve para OCR, que es mi demo. Open weights, license permisiva. Apache 2.0. Y un dato no-trivial: el soporte de qwen3_vl en vLLM llegó en la 0.10.x — antes de eso no funciona, después de la 0.12 cambia el CUDA. Esa ventana es crítica.",
+"Una decisión que cuesta entender: RawDeployment vs Knative. KServe puede correr en modo Knative — autoscaling a cero, scale-from-zero — o en modo RawDeployment, donde es un Deployment normal con HPA. Knative trae más operadores, más latencia de cold start, más cosas que pueden romper. Para un solo dev en una sola GPU, RawDeployment gana. Si tienen tráfico bursty real y muchos modelos, Knative tiene sentido.",
+"Encontrar GPU es la mitad del trabajo. Esto no aparece en ningún tutorial. Antes de TensorDock probé cinco proveedores. GCP me rechazó por service usage history. Vultr VKE estaba account-gated. Vultr standalone Cloud GPU tenía la partición A40 también gated y solo on-demand. Lambda Labs no aceptó la tarjeta. Azure tenía mi quota ticket en revisión sin aprobar. TensorDock fue el único que dejó arrancar — treinta y seis centavos la hora corriendo, medio centavo la hora apagada. El quota de GPU es un gatekeeper real, no un detalle.",
+"El hardware. TensorDock RTX 4090, cuatro vCPU, 48 gigas de RAM, 24 gigas de VRAM. Cuatro dólares al mes en spot. Una GPU consumer — no Hopper, no Ampere data-center. Eso importa, porque los drivers de GPU consumer no soportan CUDA forward-compat. Vamos a hablar de eso adentro de la sección HOW.",
+"Sección tres: HOW. Acá vamos al código. Bootstrap del nodo, instalación del stack, los charts de Helm, el manifest, scheduling, costos, y el flujo end-to-end. Las cuatro cicatrices están interleaved en su lugar natural — donde la decisión técnica las produce.",
+"Bootstrap. Bash, no Terraform. TensorDock no tiene un provider clean, así que la opción honesta es un script bash que corre via cloud-init: instala drivers, K3s, container toolkit, y deja la máquina lista para Helm. Probablemente no es lo que harían en producción multi-cloud — pero para un solo nodo, agregar Terraform es ceremonia que no paga el costo.",
+"Y acá viene la primera cicatriz, justo donde se instala el driver. War story dos: kernel pin. Reinicio el nodo después de un mantenimiento. La GPU desapareció. nvidia-smi devuelve 'no devices'. ¿Qué pasó? Unattended-upgrades subió el kernel. El driver lo instalé via .run installer — sin DKMS — entonces el módulo nvidia.ko quedó compilado contra el kernel viejo. Kernel nuevo arranca, no encuentra el módulo, GPU invisible. El fix: apt-mark hold linux-image-* y grub default fijo al kernel viejo. La lección: si no usás DKMS, pin el kernel.",
+"El stack de NVIDIA. Tres piezas que tienen que existir: el driver del host, nvidia-container-toolkit, y el Device Plugin de Kubernetes. El driver expone la GPU al kernel, el toolkit deja que containerd vea la GPU, el Device Plugin la registra como un recurso schedulable en el cluster. Si una de las tres falla, el pod no scheduluea — y el mensaje de error es siempre 'Insufficient nvidia.com/gpu' aunque el problema esté tres capas más abajo.",
+"Instalando KServe. Spoiler: el helm install oficial no funciona out of the box. Tres pasos, no uno: cert-manager primero, esperan a que esté Ready, después KServe en modo RawDeployment, después borran el ValidatingWebhookConfiguration de ModelMesh que el chart deja huérfano. Lo cuento en detalle en la próxima cicatriz.",
+"War story tres: el webhook huérfano de KServe. Helm install KServe cuelga. cainjector no inyecta caBundle. ¿Por qué? El chart oficial instala recursos de ModelMesh por defecto, con un ValidatingWebhookConfiguration que apunta a un servicio que no existe en mi modo RawDeployment. cainjector ve un webhook roto, refusea inyectar, install hangs. El fix automatizado: kubectl delete validatingwebhookconfiguration modelmesh-*, helm upgrade --reuse-values. Cinco minutos de fix, dos horas de debug.",
+"Mi setup tiene tres charts de Helm. Uno: el modelo — la InferenceService de KServe que despliega vLLM con Qwen3-VL. Dos: una API en FastAPI que recibe imágenes, las convierte a base64 y llama al endpoint OpenAI-compatible del modelo. Tres: un frontend nginx que sirve HTML/JS estático y proxy_pass al API. Separar en tres charts permite deploy independiente — si rompo el frontend no toco el modelo, que tarda un minuto en cargar.",
+"El manifest de InferenceService. Esto es lo que KServe te abstrae. Diecisiete líneas de YAML. Especificás runtime — vLLM — el modelo, la image tag pinneada, los recursos GPU. KServe debajo crea Deployment, Service, HPA, Ingress. Todo lo que pondrías a mano, en un solo CRD. Acá noten el image tag — vllm/vllm-openai pinneado a v0.11.0. No latest. La próxima slide explica por qué.",
+"War story uno: CUDA forward-compat. Error 804 en el pod de vLLM. La imagen vllm latest ships CUDA 13. Mi host driver es 570 punto 144 — eso es CUDA 12.8. La RTX 4090 es consumer. Los drivers de GPU consumer no soportan forward-compat — solo data-center. El pod arranca, vLLM intenta inicializar CUDA, falla, muere, restart loop. La señal: error 804 en logs. El fix: pinear vllm-openai a v0.11.0. Esa es la única ventana con CUDA 12.x y soporte de qwen3_vl. Esto explica el pin que vieron en el manifest.",
+"Scheduling en una sola GPU. La RTX 4090 es schedulable como nvidia.com/gpu uno. Eso significa: un pod a la vez puede tomarla. No hay MIG en consumer GPUs. Time-slicing existe pero agrega contention y para vLLM no vale la pena. Resultado: la cola de scheduling es serializada — un pod corriendo, los demás pendientes. Esto importa para el rollout. Próxima slide es la cicatriz que esto causa.",
+"War story cuatro: rolling update deadlock con una sola GPU. Push una nueva versión del modelo. Pod nuevo Pending — Insufficient nvidia.com/gpu. Pod viejo Running — tiene la GPU. El nuevo no puede arrancar hasta que el viejo libere. El viejo no se libera hasta que el nuevo esté Ready. Deadlock. La RollingUpdate strategy asume que podés tener N+1 réplicas — con una sola GPU eso no es cierto. El fix: cambiar el strategy a Recreate. Hay un blip de downtime de treinta segundos, pero el rollout completa.",
+"Una request, end-to-end. Cliente sube una imagen. Nginx la pasa al API. El API la encodea en base64, arma el payload OpenAI-style, llama al endpoint del InferenceService. KServe rutea al pod de vLLM. vLLM la corre en la GPU. La respuesta sale por el mismo camino. Latencia típica: ochocientos milisegundos para una imagen de OCR. No es realtime, pero es interactivo.",
+"MRZ — trust but verify. La parte de abajo de un pasaporte tiene dos líneas estandarizadas — Machine Readable Zone, ICAO 9303. Cada campo trae un check digit. Si el modelo me dice que el passport_number es algo, yo puedo verificarlo deterministicamente con la fórmula del check digit. Misma idea para fecha de nacimiento, fecha de expiración, sexo. Cuando puedas validar deterministicamente, hazlo. El modelo es el último recurso, no el primero. Esto cambia OCR de un acto de fe a un proceso con guardrails.",
+"Frontend mínimo, intencional. Vanilla HTML, JavaScript plano, nginx que reverse-proxea slash api slash asterisco. A propósito sin React, sin Next, sin Vite. ¿Por qué? El lab es del backend. El frontend es el más simple posible para no robar foco — ni del demo, ni del debugging, ni de la conversación. Cuando todo es complejidad, nada se distingue. Mantener una capa simple deja que las complejas se vean.",
+"Costos. Cuatro dólares con cincuenta al mes en spot, TensorDock. Cuando hay demanda y el spot se cae, falla el bootstrap y arranco una nueva instancia — el script tarda diez minutos. Si lo dejara on-demand, sería treinta y cinco al mes. Para una demo personal, el spot vale la pena. Para producción real, on-demand y un SLA.",
+"Demo. Vamos a verlo en vivo. Voy a subir una imagen, ver el OCR salir, y mostrar lo que pasa abajo — kubectl logs del pod de vLLM, el HPA, los recursos GPU. Si rompe, mejor — eso es exactamente el punto de la próxima sección.",
+"Sección cuatro: LESSONS. Las cicatrices ya las contamos en su contexto. Acá cerramos: los cuatro pins que vos ponés, la división honesta de quién hace qué, y el takeaway.",
+"Los cuatro pins que ustedes ponen. Image tag — no latest, nunca. Kernel — apt-mark hold y grub default. Driver — DKMS o pin manual. Strategy — Recreate cuando hay un solo recurso scarce. Estos cuatro no los pone KServe. No los pone vLLM. No los pone Kubernetes. Los ponen ustedes, a mano, sabiendo que existen. Si no los conocen, su deploy va a fallar — pero no es culpa del framework, es porque no conocen el stack debajo.",
+"La división honesta. Izquierda — el ochenta por ciento que KServe hace por ustedes: el CRD, routing, autoscaling, canary, multi-runtime, storage abstraction. Derecha — el veinte por ciento que sigue siendo trabajo de ustedes: pins, cuotas, observabilidad, el modelo en sí, el stack de GPU, conocer su stack. Esto refuerza visualmente lo que voy diciendo toda la charla: el framework hace mucho, pero no todo. Donde termina KServe, empieza ustedes.",
+"El takeaway. Servir AI en Kubernetes con un solo dev y cuatro dólares al mes ya es factible. KServe hace el ochenta por ciento pesado. El veinte restante — los pins, el kernel, el driver, la image tag, el rollout strategy — los ponen ustedes. No hay magia debajo del framework. Si les sale mal, es porque no conocen su stack. No porque el framework les falló. Conocer su stack es el trabajo.",
+"Recursos y Q&A. El repo está en github.com/jeffincloud — todos los manifests, los scripts de bootstrap, los tres charts de Helm. La presentación está ahí también. Para preguntas: jeffincloud en GitHub, LinkedIn jeffry-hernandez. Gracias."
+]</script>
+</head>
+<body>
+<deck-stage width="1920" height="1080">
+
+<!-- 1. Title -->
+<section data-label="01 Title" style="background: linear-gradient(135deg, #0086FF 0%, #058DC7 100%); color: white;">
+  <div style="position:absolute; inset:0; padding: 110px; display:flex; flex-direction:column; justify-content:space-between;">
+    <div style="display:flex; align-items:center; gap: 20px;">
+      <img src="assets/image10.png" alt="CNCG" style="height: 64px; background: white; padding: 14px 22px; border-radius: 4px;" />
+    </div>
+    <div>
+      <div style="font-size: 26px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 24px;">CNCG CALI · ABRIL 2026</div>
+      <h1 style="font-size: 130px; font-weight: 900; line-height: 1; margin: 0 0 32px 0; letter-spacing: -0.025em; max-width: 1500px;">Deploying<br/>AI-Native Apps<br/>on Kubernetes</h1>
+      <div style="font-size: 32px; font-weight: 400; opacity: 0.92; max-width: 1300px; line-height: 1.4;">Tres días. Cuatro cicatrices. Un cluster de un nodo.<br/>Lo que aprendí poniendo un OCR de Qwen3-VL detrás de KServe.</div>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+      <div style="font-size: 24px; font-weight: 700;">
+        Jeffry Hernandez<br/>
+        <span style="font-weight: 400; opacity: 0.85;">Senior SRE · Wizeline</span>
+      </div>
+      <div style="font-size: 24px; opacity: 0.75; text-align: right; line-height: 1.5;">
+        github.com/jeffincloud<br/>
+        linkedin.com/in/jeffry-hernandez
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. whoami -->
+<section data-label="02 whoami">
+  <div class="slide-pad">
+    <div style="font-family: Consolas, Menlo, monospace; font-size: 32px; color: #888; margin-bottom: 24px;">$ whoami</div>
+    <h1 class="slide-title">Jeffry Hernandez</h1>
+    <h2 class="slide-subtitle">Senior SRE · Wizeline</h2>
+    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 80px; margin-top: 20px;">
+      <ul class="bullet-list">
+        <li>Años en infra cloud-native — Kubernetes, observabilidad, plataforma.</li>
+        <li>AI lo arranqué hace pocos meses, como side project.</li>
+        <li>Esta charla = lecciones reales, no marketing de vendor.</li>
+        <li>Todo el código está en mi repo. Link al final.</li>
+      </ul>
+      <div style="background: #F6F8FA; padding: 32px; border-left: 4px solid #0086FF;">
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.15em; color: #0086FF; margin-bottom: 16px;">CONTACTO</div>
+        <div style="font-family: Consolas, Menlo, monospace; font-size: 26px; line-height: 1.9;">
+          github.com/<b>jeffincloud</b><br/>
+          linkedin.com/in/<b>jeffry-hernandez</b>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>Deploying AI-Native Apps on K8s · CNCG Cali 2026</div>
+  </div>
+</section>
+
+<!-- 3. The pitch -->
+<section data-label="03 The pitch">
+  <div class="slide-pad">
+    <h1 class="slide-title">The pitch I made to myself</h1>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 60px; flex:1; align-items: center;">
+      <div style="background: #F6F8FA; padding: 50px; border-left: 6px solid #0086FF;">
+        <div class="tag blue" style="margin-bottom: 18px;">HACE 3 MESES</div>
+        <div style="font-size: 38px; font-weight: 400; line-height: 1.4; font-style: italic;">
+          "Voy a levantar un demo de OCR<br/>con un modelo open-source<br/>en mi propio cluster.<br/><br/>
+          <span style="color: #0086FF; font-weight: 700; font-style: normal;">Una InferenceService y listo.</span>"
+        </div>
+      </div>
+      <div style="background: #FFF6F2; padding: 50px; border-left: 6px solid #ED561B;">
+        <div class="tag warn" style="margin-bottom: 18px;">3 DÍAS DESPUÉS</div>
+        <div style="font-size: 30px; font-weight: 400; line-height: 1.5;">
+          <div style="margin-bottom: 16px;"><b style="color:#ED561B;">4 cicatrices.</b></div>
+          <div style="font-size: 26px; line-height: 1.6;">
+            GPU quota cerrada en todos los clouds.<br/>
+            Kernel pin del host.<br/>
+            vLLM pinneado a una versión específica.<br/>
+            Webhook huérfano de KServe.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>03</div>
+  </div>
+</section>
+
+<!-- 4. WHY divider -->
+<section data-label="04 WHY divider">
+  <div class="divider">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 01 / 04</div>
+    <h1>Why</h1>
+    <div class="divider-sub">Por qué Kubernetes para apps AI-native — y qué constraints definieron toda la arquitectura.</div>
+  </div>
+</section>
+
+<!-- 5. CONSOLIDATED Promise vs Reality -->
+<section data-label="05 Promise vs Reality">
+  <div class="slide-pad">
+    <div class="section-tag">Why · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">La promesa vs. la realidad</h1>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="background: #F6F8FA; padding: 40px; border-left: 4px solid #0086FF;">
+        <div class="tag blue" style="margin-bottom: 20px;">LA PROMESA</div>
+        <div style="font-size: 26px; line-height: 1.5; font-weight: 400; margin-bottom: 24px;">
+          KServe + vLLM = serving production-ready en <b>5 minutos</b>.
+        </div>
+        <pre class="code" style="font-size: 20px;">$ helm install kserve oci://...
+$ kubectl apply -f inferenceservice.yaml
+<span class="ok"># READY ✓</span></pre>
+        <div style="font-size: 22px; color: #555; margin-top: 26px; line-height: 1.5;">
+          La doc oficial es excelente — pero <b>asume</b> 3 cosas: cluster sano, driver alineado con CUDA, modelo entra en VRAM.
+        </div>
+      </div>
+      <div style="background: #FFF6F2; padding: 40px; border-left: 4px solid #ED561B;">
+        <div class="tag warn" style="margin-bottom: 20px;">LA REALIDAD</div>
+        <div style="font-size: 26px; line-height: 1.5; margin-bottom: 22px;">
+          <b style="color:#ED561B;">3 días, 4 cicatrices.</b>
+        </div>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;">CUDA forward-compat — error 804</li>
+          <li style="font-size: 22px;">Kernel pin del host</li>
+          <li style="font-size: 22px;">Webhook huérfano de KServe</li>
+          <li style="font-size: 22px;">Rolling update deadlock con 1 GPU</li>
+        </ul>
+        <div style="font-size: 22px; color: #ED561B; font-weight: 700; margin-top: 26px;">
+          Las vamos a ver una por una — en su contexto técnico.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>05</div>
+  </div>
+</section>
+
+<!-- 6. Why K8s for AI -->
+<section data-label="06 Why K8s for AI">
+  <div class="slide-pad">
+    <div class="section-tag">Why · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Por qué Kubernetes para AI</h1>
+    <h2 class="slide-subtitle">Respuesta corta: porque ya lo conocés. Tres razones reales:</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; flex: 1;">
+      <div style="background: #F6F8FA; padding: 40px 32px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 72px; font-weight: 900; color: #0086FF; line-height: 1; margin-bottom: 18px;">01</div>
+        <div style="font-size: 26px; font-weight: 700; margin-bottom: 14px;">Modelos = binarios pesados</div>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Querés versionarlos como cualquier deploy. Image tag, rollback, canary — lo mismo de siempre.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px 32px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 72px; font-weight: 900; color: #0086FF; line-height: 1; margin-bottom: 18px;">02</div>
+        <div style="font-size: 26px; font-weight: 700; margin-bottom: 14px;">Cargas AI son spiky</div>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">GPU al 100% por 10s y luego nada. Exactamente lo que el autoscaling de K8s sabe manejar.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px 32px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 72px; font-weight: 900; color: #0086FF; line-height: 1; margin-bottom: 18px;">03</div>
+        <div style="font-size: 26px; font-weight: 700; margin-bottom: 14px;">Las primitivas sirven</div>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Helm, ConfigMap, Secret, Ingress. Sirven igual para un LLM. No hay magia — solo más YAML.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>06</div>
+  </div>
+</section>
+
+<!-- 7. Constraints -->
+<section data-label="07 Constraints">
+  <div class="slide-pad">
+    <div class="section-tag">Why · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Las constraints que elegí</h1>
+    <h2 class="slide-subtitle">Estas definen toda la arquitectura. Si tu situación es otra, algunas decisiones cambian.</h2>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 20px;">
+      <div style="text-align: center; padding: 50px 20px; border: 2px solid #0086FF;">
+        <div style="font-size: 110px; font-weight: 900; color: #0086FF; line-height: 1;">1</div>
+        <div style="font-size: 24px; font-weight: 700; margin-top: 14px;">nodo</div>
+      </div>
+      <div style="text-align: center; padding: 50px 20px; border: 2px solid #0086FF;">
+        <div style="font-size: 110px; font-weight: 900; color: #0086FF; line-height: 1;">1</div>
+        <div style="font-size: 24px; font-weight: 700; margin-top: 14px;">dev</div>
+      </div>
+      <div style="text-align: center; padding: 50px 20px; border: 2px solid #0086FF;">
+        <div style="font-size: 110px; font-weight: 900; color: #0086FF; line-height: 1;">1</div>
+        <div style="font-size: 24px; font-weight: 700; margin-top: 14px;">GPU</div>
+      </div>
+      <div style="text-align: center; padding: 50px 20px; border: 2px solid #0086FF;">
+        <div style="font-size: 90px; font-weight: 900; color: #0086FF; line-height: 1;">~$4</div>
+        <div style="font-size: 24px; font-weight: 700; margin-top: 14px;">/ mes</div>
+      </div>
+    </div>
+    <div style="margin-top: 60px; font-size: 26px; color: #555; line-height: 1.5; max-width: 1400px;">
+      Esto <b>no es producción de Netflix</b>. Es lo que un solo ingeniero puede sostener en su tiempo libre. Toda la charla está calibrada a este escenario.
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>07</div>
+  </div>
+</section>
+
+<!-- 8. NEW Quantization -->
+<section data-label="08 Quantization">
+  <div class="slide-pad">
+    <div class="section-tag">Why · 04</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Quantization — en una slide</h1>
+    <h2 class="slide-subtitle">La precisión numérica es la palanca más grande para meter un modelo en una GPU consumer.</h2>
+
+    <div style="margin-top: 10px; border: 1px solid #ddd; border-radius: 4px; overflow: hidden;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; background: #0086FF; color: white; font-weight: 900; font-size: 24px;">
+        <div style="padding: 20px 28px;">Precisión</div>
+        <div style="padding: 20px 28px;">Tamaño / param</div>
+        <div style="padding: 20px 28px;">Velocidad</div>
+        <div style="padding: 20px 28px;">Pérdida calidad</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; background: white; border-top: 1px solid #ddd; font-size: 24px;">
+        <div style="padding: 22px 28px; font-weight: 700;">FP32</div>
+        <div style="padding: 22px 28px;">4 bytes</div>
+        <div style="padding: 22px 28px;">baseline</div>
+        <div style="padding: 22px 28px; color: #50B432; font-weight: 700;">ninguna</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; background: #F6F8FA; border-top: 1px solid #ddd; font-size: 24px;">
+        <div style="padding: 22px 28px; font-weight: 700;">FP16</div>
+        <div style="padding: 22px 28px;">2 bytes</div>
+        <div style="padding: 22px 28px;">~2× más rápido</div>
+        <div style="padding: 22px 28px; color: #50B432; font-weight: 700;">imperceptible</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; background: white; border-top: 1px solid #ddd; font-size: 24px;">
+        <div style="padding: 22px 28px; font-weight: 700;">INT8</div>
+        <div style="padding: 22px 28px;">1 byte</div>
+        <div style="padding: 22px 28px;">~4× más rápido</div>
+        <div style="padding: 22px 28px; color: #ED561B;">notable, manejable</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; background: #F6F8FA; border-top: 1px solid #ddd; font-size: 24px;">
+        <div style="padding: 22px 28px; font-weight: 700;">INT4</div>
+        <div style="padding: 22px 28px;">0.5 bytes</div>
+        <div style="padding: 22px 28px;">muy rápido</div>
+        <div style="padding: 22px 28px; color: #ED561B; font-weight: 700;">degradación visible</div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 40px; margin-top: 36px;">
+      <div style="background: #F6F8FA; padding: 24px 30px; border-left: 4px solid #0086FF; font-size: 24px; line-height: 1.5;">
+        <b>Qwen3-VL-4B</b> · FP32 = <b>16 GB</b> &nbsp;→&nbsp; FP16 = <b>8 GB</b><br/>
+        Entra en RTX 4090 (24 GB) <span style="color:#50B432; font-weight: 700;">con margen</span> para el KV cache.
+      </div>
+      <div style="font-size: 26px; font-weight: 900; color: #ED561B; align-self: center; line-height: 1.3;">
+        Quantization no es opcional cuando tu GPU no es H100.
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>08</div>
+  </div>
+</section>
+
+<!-- 9. WHAT divider -->
+<section data-label="09 WHAT divider">
+  <div class="divider">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 02 / 04</div>
+    <h1>What</h1>
+    <div class="divider-sub">Las piezas que elegí, y por qué cada una. Pasamos rápido — lo importante es ver cómo encajan.</div>
+  </div>
+</section>
+
+<!-- 10. Stack at a glance -->
+<section data-label="10 Stack at a glance">
+  <div class="slide-pad">
+    <div class="section-tag">What · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">El stack de un vistazo</h1>
+    <div style="flex:1; display:flex; flex-direction:column; gap: 18px; justify-content:center; max-width: 1500px; margin: 20px auto 0;">
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Application</div>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+          <div class="box fill-blue">Frontend · nginx + JS</div>
+          <div class="box fill-blue">API · FastAPI</div>
+          <div class="box fill-blue">Model · vLLM + Qwen3-VL-4B</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Serving</div>
+        <div class="box blue" style="font-size: 22px;">KServe v0.14 · RawDeployment mode</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Platform</div>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+          <div class="box">cert-manager</div>
+          <div class="box">NVIDIA Device Plugin</div>
+          <div class="box">nvidia-container-toolkit</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Kubernetes</div>
+        <div class="box fill-stone" style="font-size: 22px;">K3s v1.34 · single node</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Hardware</div>
+        <div class="box" style="background: #000; color: white; border-color: #000; font-size: 22px;">TensorDock · RTX 4090 · 4 vCPU · 48GB RAM · 24GB VRAM</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>10</div>
+  </div>
+</section>
+
+<!-- 11. K3s -->
+<section data-label="11 K3s">
+  <div class="slide-pad">
+    <div class="section-tag">What · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;">K3s — un binario, sesenta segundos</h1>
+    <div style="display:grid; grid-template-columns: 1.1fr 1fr; gap: 60px; flex:1;">
+      <div>
+        <h2 class="slide-subtitle" style="margin-bottom: 30px;">¿Por qué K3s y no kubeadm, k0s, minikube?</h2>
+        <ul class="bullet-list">
+          <li>Un binario. <span class="mono">~50 MB</span>. Install en 60 segundos.</li>
+          <li>Trae <b>Traefik</b>, ServiceLB, local-path-provisioner por default.</li>
+          <li>v1.34 ya soporta los CRDs que KServe v0.14 espera.</li>
+          <li>Sin componentes que no uso. Para 1 nodo es el sweet spot.</li>
+        </ul>
+      </div>
+      <div>
+        <pre class="code"><span class="com"># un solo comando</span>
+$ curl -sfL https://get.k3s.io | sh -
+
+<span class="com"># 60 segundos después</span>
+$ kubectl get nodes
+NAME       STATUS   ROLES                  VERSION
+gpu-node   <span class="ok">Ready</span>    control-plane,master   v1.34.1+k3s1</pre>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>11</div>
+  </div>
+</section>
+
+<!-- 12. KServe overview -->
+<section data-label="12 KServe">
+  <div class="slide-pad">
+    <div class="section-tag">What · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">KServe — el adulto en la sala</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; flex:1;">
+      <div>
+        <h2 class="slide-subtitle">Abstrae <i>"esto es un modelo, dale una URL".</i></h2>
+        <ul class="bullet-list">
+          <li>Escalado, routing, canary, transformers, predictors.</li>
+          <li><b>InferenceService</b> = un CRD que esconde Deployment + Service + HPA + Ingress.</li>
+          <li>El <b>80%</b> del trabajo de serving lo hace KServe.</li>
+          <li>El otro <b>20%</b> — pins, drivers — lo ponés vos.</li>
+        </ul>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px; border-left: 4px solid #0086FF; align-self: center;">
+        <div style="font-size: 22px; line-height: 1.6; color: #333;">
+          <b>Importante:</b><br/><br/>
+          KServe <span style="color:#50B432; font-weight:700;">no te falla.</span><br/>
+          <span style="color: #ED561B; font-weight: 700;">Vos no conocés tu stack.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>12</div>
+  </div>
+</section>
+
+<!-- 13. NEW KServe components -->
+<section data-label="13 KServe components">
+  <div class="slide-pad">
+    <div class="section-tag">What · 04</div>
+    <h1 class="slide-title" style="margin-top: 30px;">KServe — el modelo mental</h1>
+    <h2 class="slide-subtitle">Cinco componentes que vale la pena tener en la cabeza.</h2>
+
+    <div style="flex:1; display:flex; flex-direction:column; gap: 22px; justify-content:center;">
+      <!-- top: InferenceService -->
+      <div style="display:flex; justify-content:center;">
+        <div style="background: #0086FF; color: white; padding: 22px 50px; font-size: 26px; font-weight: 900; border-radius: 4px; min-width: 600px; text-align: center;">
+          InferenceService
+          <div style="font-size: 18px; font-weight: 400; opacity: 0.9; margin-top: 4px;">CR de alto nivel — <i>"quiero servir este modelo"</i></div>
+        </div>
+      </div>
+      <!-- arrow down -->
+      <div style="text-align: center; font-size: 28px; color: #0086FF;">↓</div>
+      <!-- second row: ServingRuntime -->
+      <div style="display:flex; justify-content:center;">
+        <div style="border: 2px solid #0086FF; padding: 18px 40px; font-size: 24px; font-weight: 700; min-width: 500px; text-align: center;">
+          ServingRuntime
+          <div style="font-size: 18px; font-weight: 400; color: #555; margin-top: 4px;">cómo lo sirvo — container + args + env</div>
+        </div>
+      </div>
+      <!-- third row: predictor / transformer / explainer -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1500px; margin: 0 auto; width: 100%;">
+        <div style="border: 2px solid #0086FF; background: #F6F8FA; padding: 22px 24px; text-align: center;">
+          <div style="font-size: 22px; font-weight: 900;">Predictor</div>
+          <div style="font-size: 18px; color: #555; margin-top: 6px;">el componente que predice (vLLM)</div>
+        </div>
+        <div style="border: 2px dashed #888; padding: 22px 24px; text-align: center;">
+          <div style="font-size: 22px; font-weight: 900; color: #555;">Transformer <span style="font-size: 14px;">(opcional)</span></div>
+          <div style="font-size: 18px; color: #555; margin-top: 6px;">pre / post-procesado</div>
+        </div>
+        <div style="border: 2px dashed #888; padding: 22px 24px; text-align: center;">
+          <div style="font-size: 22px; font-weight: 900; color: #555;">Explainer <span style="font-size: 14px;">(opcional)</span></div>
+          <div style="font-size: 18px; color: #555; margin-top: 6px;">explicabilidad</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align: center; font-size: 26px; font-weight: 900; color: #0086FF; margin-top: 30px;">
+      Vos declarás el <i>qué</i>. KServe arma el <i>cómo</i>.
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>13</div>
+  </div>
+</section>
+
+<!-- 14. vLLM -->
+<section data-label="14 vLLM">
+  <div class="slide-pad">
+    <div class="section-tag">What · 05</div>
+    <h1 class="slide-title" style="margin-top: 30px;">vLLM — el motor de inferencia</h1>
+    <div style="display:grid; grid-template-columns: 1.1fr 1fr; gap: 60px; flex:1;">
+      <div>
+        <ul class="bullet-list">
+          <li><b>PagedAttention</b> — manejo de KV-cache eficiente.</li>
+          <li><b>Batching continuo</b> — agrupa requests al vuelo.</li>
+          <li><b>OpenAI-compatible API</b> — drop-in replacement.</li>
+          <li>Si servís un LLM hoy y no es vLLM, probablemente debería serlo.</li>
+        </ul>
+      </div>
+      <div style="background: #FFF6F2; padding: 40px; border-left: 4px solid #ED561B; align-self: center;">
+        <div class="tag warn" style="margin-bottom: 18px;">LA TRAMPA</div>
+        <div style="font-size: 24px; line-height: 1.5;">
+          La imagen <span class="mono">vllm/vllm-openai:latest</span> se mueve rápido y rompe compat con CUDA.<br/><br/>
+          <span style="color: #ED561B; font-weight: 700;">→ ya volveremos a esto en HOW.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>14</div>
+  </div>
+</section>
+
+<!-- 15. Qwen3-VL -->
+<section data-label="15 Qwen3-VL">
+  <div class="slide-pad">
+    <div class="section-tag">What · 06</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Qwen3-VL-4B-Instruct</h1>
+    <h2 class="slide-subtitle">Por qué este modelo y no otro.</h2>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 10px;">
+      <div style="background:#F6F8FA; padding: 32px 26px; border-top: 4px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">4B</div>
+        <div style="font-size: 20px; font-weight: 700; margin-top: 12px;">parámetros</div>
+        <div style="font-size: 18px; color: #555; margin-top: 8px; line-height: 1.4;">Entra en 24GB VRAM en FP16 con margen.</div>
+      </div>
+      <div style="background:#F6F8FA; padding: 32px 26px; border-top: 4px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">VL</div>
+        <div style="font-size: 20px; font-weight: 700; margin-top: 12px;">vision-language</div>
+        <div style="font-size: 18px; color: #555; margin-top: 8px; line-height: 1.4;">Sirve para OCR — que es la demo.</div>
+      </div>
+      <div style="background:#F6F8FA; padding: 32px 26px; border-top: 4px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">A2.0</div>
+        <div style="font-size: 20px; font-weight: 700; margin-top: 12px;">Apache 2.0</div>
+        <div style="font-size: 18px; color: #555; margin-top: 8px; line-height: 1.4;">Open weights, license permisiva.</div>
+      </div>
+      <div style="background:#FFF6F2; padding: 32px 26px; border-top: 4px solid #ED561B;">
+        <div style="font-size: 56px; font-weight: 900; color: #ED561B; line-height: 1;">0.11.x</div>
+        <div style="font-size: 20px; font-weight: 700; margin-top: 12px;">vLLM ventana</div>
+        <div style="font-size: 18px; color: #555; margin-top: 8px; line-height: 1.4;">qwen3_vl + CUDA 12.x. Crítica.</div>
+      </div>
+    </div>
+    <div style="margin-top: 50px; font-size: 22px; color: #444; line-height: 1.5; max-width: 1500px;">
+      Soporte de <span class="mono">qwen3_vl</span> llegó en vLLM <span class="mono">0.10.x</span>. Antes no funciona, después de <span class="mono">0.12</span> cambia el CUDA. Esa ventana es crítica para mi setup.
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>15</div>
+  </div>
+</section>
+
+<!-- 16. RawDeployment vs Knative -->
+<section data-label="16 RawDeployment vs Knative">
+  <div class="slide-pad">
+    <div class="section-tag">What · 07</div>
+    <h1 class="slide-title" style="margin-top: 30px;">RawDeployment vs. Knative</h1>
+    <h2 class="slide-subtitle">Una decisión de KServe que cuesta entender — y que cambia toda la operación.</h2>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="border: 2px solid #0086FF; padding: 40px;">
+        <div class="tag blue" style="margin-bottom: 20px;">RAWDEPLOYMENT &nbsp; ✓ ELEGIDO</div>
+        <h3 style="font-size: 30px; margin: 0 0 20px 0;">Deployment + HPA, normal.</h3>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;">Menos operadores corriendo</li>
+          <li style="font-size: 22px;">Sin cold starts de Knative</li>
+          <li style="font-size: 22px;">Menos cosas que pueden romper</li>
+          <li style="font-size: 22px;"><b>Sweet spot</b> para 1 dev, 1 GPU</li>
+        </ul>
+      </div>
+      <div style="border: 2px solid #E5E5E5; padding: 40px; opacity: 0.85;">
+        <div class="tag muted" style="margin-bottom: 20px;">KNATIVE &nbsp; — DESCARTADO</div>
+        <h3 style="font-size: 30px; margin: 0 0 20px 0;">Scale-to-zero, serverless.</h3>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;">Más operadores — Activator, Autoscaler</li>
+          <li style="font-size: 22px;">Cold starts visibles</li>
+          <li style="font-size: 22px;">Sentido si tenés tráfico bursty real y muchos modelos</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>16</div>
+  </div>
+</section>
+
+<!-- 17. NEW GPU odyssey -->
+<section data-label="17 GPU odyssey">
+  <div class="slide-pad">
+    <div class="section-tag">What · 08</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Encontrar GPU es la mitad del trabajo</h1>
+    <h2 class="slide-subtitle">Cinco proveedores antes de uno que dejara arrancar. Esto no aparece en ningún tutorial.</h2>
+
+    <div style="border: 1px solid #ddd; border-radius: 4px; overflow: hidden; margin-top: 10px;">
+      <div style="display: grid; grid-template-columns: 280px 1fr 60px; background: #F6F8FA; font-weight: 900; font-size: 20px; color: #888; text-transform: uppercase; letter-spacing: 0.1em;">
+        <div style="padding: 16px 28px;">Proveedor</div>
+        <div style="padding: 16px 28px;">Resultado</div>
+        <div style="padding: 16px 28px;"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 280px 1fr 60px; background: white; border-top: 1px solid #eee; font-size: 24px;">
+        <div style="padding: 20px 28px; font-weight: 700;">GCP</div>
+        <div style="padding: 20px 28px; color: #555;">"not eligible based on service usage history"</div>
+        <div style="padding: 20px 28px; color: #ED561B; font-size: 28px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 280px 1fr 60px; background: #FAFBFC; border-top: 1px solid #eee; font-size: 24px;">
+        <div style="padding: 20px 28px; font-weight: 700;">Vultr VKE</div>
+        <div style="padding: 20px 28px; color: #555;">account-gated</div>
+        <div style="padding: 20px 28px; color: #ED561B; font-size: 28px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 280px 1fr 60px; background: white; border-top: 1px solid #eee; font-size: 24px;">
+        <div style="padding: 20px 28px; font-weight: 700;">Vultr Cloud GPU</div>
+        <div style="padding: 20px 28px; color: #555;">A40 partition gated, on-demand only</div>
+        <div style="padding: 20px 28px; color: #ED561B; font-size: 28px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 280px 1fr 60px; background: #FAFBFC; border-top: 1px solid #eee; font-size: 24px;">
+        <div style="padding: 20px 28px; font-weight: 700;">Lambda Labs</div>
+        <div style="padding: 20px 28px; color: #555;">no aceptó la tarjeta</div>
+        <div style="padding: 20px 28px; color: #ED561B; font-size: 28px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 280px 1fr 60px; background: white; border-top: 1px solid #eee; font-size: 24px;">
+        <div style="padding: 20px 28px; font-weight: 700;">Azure GPU</div>
+        <div style="padding: 20px 28px; color: #555;">quota tickets en revisión, sin aprobar</div>
+        <div style="padding: 20px 28px; color: #ED561B; font-size: 28px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display: grid; grid-template-columns: 280px 1fr 60px; background: #F0FBEF; border-top: 1px solid #eee; font-size: 24px;">
+        <div style="padding: 20px 28px; font-weight: 900; color: #2E7D2E;">TensorDock</div>
+        <div style="padding: 20px 28px; color: #2E7D2E;"><span class="mono">$0.36/hr</span> running &nbsp;·&nbsp; <span class="mono">$0.005/hr</span> stopped</div>
+        <div style="padding: 20px 28px; color: #50B432; font-size: 28px; font-weight: 900;">✓</div>
+      </div>
+    </div>
+
+    <div style="background: #F6F8FA; padding: 22px 28px; margin-top: 30px; border-left: 4px solid #ED561B; font-size: 24px; line-height: 1.4;">
+      El <b>quota de GPU</b> es un gatekeeper real, no un detalle.
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>17</div>
+  </div>
+</section>
+
+<!-- 18. Hardware -->
+<section data-label="18 Hardware">
+  <div style="position:absolute; inset:0; background: #000; color: white; padding: 90px 110px; display:flex; flex-direction:column; justify-content:center;">
+    <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.3em; color: #93EAFF; margin-bottom: 24px;">WHAT · 09 — HARDWARE</div>
+    <h1 style="font-size: 110px; font-weight: 900; line-height: 1; margin: 0 0 50px 0; letter-spacing: -0.02em;">TensorDock<br/>RTX 4090</h1>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 40px; margin-top: 20px;">
+      <div>
+        <div style="font-size: 60px; font-weight: 900; color: #93EAFF; line-height: 1;">4</div>
+        <div style="font-size: 24px; margin-top: 10px; color: #ccc;">vCPU</div>
+      </div>
+      <div>
+        <div style="font-size: 60px; font-weight: 900; color: #93EAFF; line-height: 1;">48GB</div>
+        <div style="font-size: 24px; margin-top: 10px; color: #ccc;">RAM</div>
+      </div>
+      <div>
+        <div style="font-size: 60px; font-weight: 900; color: #93EAFF; line-height: 1;">24GB</div>
+        <div style="font-size: 24px; margin-top: 10px; color: #ccc;">VRAM</div>
+      </div>
+      <div>
+        <div style="font-size: 60px; font-weight: 900; color: #93EAFF; line-height: 1;">~$4</div>
+        <div style="font-size: 24px; margin-top: 10px; color: #ccc;">/ mes spot</div>
+      </div>
+    </div>
+    <div style="margin-top: 70px; max-width: 1300px; font-size: 26px; line-height: 1.5; color: #ddd;">
+      <span style="color: #ED561B; font-weight: 700;">Una GPU consumer.</span> No Hopper, no Ampere data-center. <br/>
+      Eso importa: drivers consumer <b>no</b> soportan CUDA forward-compat.
+    </div>
+  </div>
+</section>
+
+<!-- 19. HOW divider -->
+<section data-label="19 HOW divider">
+  <div class="divider" style="background: #058DC7;">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 03 / 04</div>
+    <h1>How</h1>
+    <div class="divider-sub">Bootstrap, NVIDIA stack, KServe, charts, manifest, scheduling, request, costos. Las 4 cicatrices interleaved donde cada decisión las produce.</div>
+  </div>
+</section>
+
+<!-- 20. Bootstrap -->
+<section data-label="20 Bootstrap">
+  <div class="slide-pad">
+    <div class="section-tag">How · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Bootstrap — bash, no Terraform</h1>
+    <h2 class="slide-subtitle">TensorDock no tiene un provider clean. Para 1 nodo, agregar Terraform es ceremonia que no paga.</h2>
+    <pre class="code" style="font-size: 22px; flex: 1;"><span class="com">#!/usr/bin/env bash</span>
+<span class="com"># bootstrap.sh — corre via cloud-init</span>
+<span class="kw">set</span> -euo pipefail
+
+<span class="com"># 1. Driver NVIDIA (.run installer — ojo con DKMS, war story siguiente)</span>
+sh NVIDIA-Linux-x86_64-570.144.run --silent --no-questions
+
+<span class="com"># 2. Container toolkit — para que containerd vea la GPU</span>
+apt-get install -y nvidia-container-toolkit
+
+<span class="com"># 3. K3s — 60 segundos</span>
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=<span class="str">v1.34.1+k3s1</span> sh -
+
+<span class="com"># 4. NVIDIA Device Plugin — registra nvidia.com/gpu en el cluster</span>
+kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/...
+
+<span class="com"># 5. Pin el kernel — la próxima slide explica por qué</span>
+apt-mark hold linux-image-* linux-headers-*</pre>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>20</div>
+  </div>
+</section>
+
+<!-- 21. War story 2 — Kernel pin -->
+<section data-label="21 War story Kernel">
+  <div class="slide-pad">
+    <div class="section-tag" style="color: #ED561B;">War story · cicatriz #1</div>
+    <h1 class="slide-title" style="margin-top: 30px; color: #ED561B;">Kernel pin — la GPU desapareció</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag warn" style="margin-bottom: 16px;">SÍNTOMA</div>
+        <pre class="code" style="font-size: 19px;"><span class="com"># post-reboot</span>
+$ nvidia-smi
+<span class="err">No devices were found</span>
+
+$ kubectl describe node | grep gpu
+<span class="com"># nvidia.com/gpu: 0   ← era 1</span></pre>
+        <div class="tag warn" style="margin: 30px 0 16px 0;">CAUSA</div>
+        <ul class="bullet-list" style="gap: 12px;">
+          <li style="font-size: 22px;"><span class="mono">unattended-upgrades</span> subió el kernel</li>
+          <li style="font-size: 22px;">Driver instalado via <span class="mono">.run</span> — sin DKMS</li>
+          <li style="font-size: 22px;"><span class="mono">nvidia.ko</span> compilado contra kernel viejo</li>
+          <li style="font-size: 22px;">Kernel nuevo arranca → GPU invisible</li>
+        </ul>
+      </div>
+      <div>
+        <div class="tag ok" style="margin-bottom: 16px;">FIX</div>
+        <pre class="code" style="font-size: 19px;"><span class="com"># pin el kernel</span>
+$ apt-mark hold linux-image-* linux-headers-*
+
+<span class="com"># grub default fijo al kernel viejo</span>
+$ grub-set-default <span class="num">0</span>
+$ update-grub
+
+<span class="com"># o mejor: usá DKMS</span>
+$ apt install nvidia-dkms-570</pre>
+        <div style="background: #F6F8FA; padding: 24px 28px; margin-top: 30px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5;">
+          <b>Lección:</b><br/>
+          Si no usás DKMS, pin el kernel. Si usás DKMS, igual probá un reboot antes de irte a dormir.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>21</div>
+  </div>
+</section>
+
+<!-- 22. NVIDIA stack -->
+<section data-label="22 NVIDIA stack">
+  <div class="slide-pad">
+    <div class="section-tag">How · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;">El stack de NVIDIA — 3 piezas</h1>
+    <h2 class="slide-subtitle">Si una de las tres falla, el pod no schedulea. El error es siempre <span class="mono">Insufficient nvidia.com/gpu</span> — aunque la causa esté 3 capas más abajo.</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; flex: 1; align-items: stretch;">
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF; display: flex; flex-direction: column;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.15em;">CAPA 1 · KERNEL</div>
+        <h3 style="font-size: 28px; font-weight: 900; margin: 16px 0;">Driver del host</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444; margin-bottom: auto;">Expone la GPU al kernel Linux. <span class="mono">nvidia.ko</span>.</div>
+        <div class="mono" style="font-size: 20px; margin-top: 24px; padding: 12px; background: white; border: 1px solid #ddd;">$ nvidia-smi</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF; display: flex; flex-direction: column;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.15em;">CAPA 2 · RUNTIME</div>
+        <h3 style="font-size: 28px; font-weight: 900; margin: 16px 0;">container-toolkit</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444; margin-bottom: auto;">Deja que <b>containerd</b> vea la GPU dentro del container.</div>
+        <div class="mono" style="font-size: 20px; margin-top: 24px; padding: 12px; background: white; border: 1px solid #ddd;">/etc/containerd/config.toml</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF; display: flex; flex-direction: column;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.15em;">CAPA 3 · K8S</div>
+        <h3 style="font-size: 28px; font-weight: 900; margin: 16px 0;">Device Plugin</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444; margin-bottom: auto;">Registra la GPU como recurso schedulable: <span class="mono">nvidia.com/gpu</span>.</div>
+        <div class="mono" style="font-size: 20px; margin-top: 24px; padding: 12px; background: white; border: 1px solid #ddd;">DaemonSet, kube-system</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>22</div>
+  </div>
+</section>
+
+<!-- 23. KServe install -->
+<section data-label="23 KServe install">
+  <div class="slide-pad">
+    <div class="section-tag">How · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Instalando KServe — 3 pasos, no 1</h1>
+    <h2 class="slide-subtitle">El <span class="mono">helm install</span> oficial <b>no funciona</b> out of the box. La próxima slide cuenta por qué.</h2>
+    <div style="display:flex; flex-direction:column; gap: 22px; flex: 1;">
+      <div style="display:grid; grid-template-columns: 80px 1fr; gap: 30px; align-items:center;">
+        <div style="font-size: 60px; font-weight: 900; color: #0086FF; line-height: 1;">1</div>
+        <div style="background: #F6F8FA; padding: 24px 28px; font-family: Consolas, monospace; font-size: 22px; border-left: 4px solid #0086FF;">
+          helm install cert-manager jetstack/cert-manager --set installCRDs=true
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 80px 1fr; gap: 30px; align-items:center;">
+        <div style="font-size: 60px; font-weight: 900; color: #0086FF; line-height: 1;">2</div>
+        <div style="background: #F6F8FA; padding: 24px 28px; font-family: Consolas, monospace; font-size: 22px; border-left: 4px solid #0086FF;">
+          helm install kserve oci://ghcr.io/kserve/charts/kserve --set kserve.controller.deploymentMode=RawDeployment
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 80px 1fr; gap: 30px; align-items:center;">
+        <div style="font-size: 60px; font-weight: 900; color: #ED561B; line-height: 1;">3</div>
+        <div style="background: #FFF6F2; padding: 24px 28px; font-family: Consolas, monospace; font-size: 22px; border-left: 4px solid #ED561B;">
+          kubectl delete validatingwebhookconfiguration modelmesh-* &nbsp;<span style="color: #ED561B; font-weight: 700;"># el huérfano</span>
+        </div>
+      </div>
+    </div>
+    <div style="font-size: 22px; color: #555; margin-top: 30px; line-height: 1.5;">
+      El paso 3 no está en la doc. Es lo que hay que hacer <i>realmente</i> para que <span class="mono">cainjector</span> deje de bloquearse.
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>23</div>
+  </div>
+</section>
+
+<!-- 24. War story 3 — KServe webhook -->
+<section data-label="24 War story KServe">
+  <div class="slide-pad">
+    <div class="section-tag" style="color: #ED561B;">War story · cicatriz #2</div>
+    <h1 class="slide-title" style="margin-top: 30px; color: #ED561B;">KServe — el webhook huérfano</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag warn" style="margin-bottom: 16px;">SÍNTOMA</div>
+        <pre class="code" style="font-size: 19px;">$ helm install kserve ...
+<span class="com"># cuelga</span>
+
+$ kubectl logs cainjector
+<span class="err">failed to inject caBundle: webhook</span>
+<span class="err">  references service modelmesh-webhook</span>
+<span class="err">  which does not exist</span></pre>
+        <div class="tag warn" style="margin: 30px 0 16px 0;">CAUSA</div>
+        <ul class="bullet-list" style="gap: 12px;">
+          <li style="font-size: 22px;">Chart oficial instala <b>ModelMesh</b> por default</li>
+          <li style="font-size: 22px;">Webhook apunta a un servicio que no existe en RawDeployment</li>
+          <li style="font-size: 22px;"><span class="mono">cainjector</span> ve webhook roto → install hangs</li>
+        </ul>
+      </div>
+      <div>
+        <div class="tag ok" style="margin-bottom: 16px;">FIX</div>
+        <pre class="code" style="font-size: 19px;"><span class="com"># 1. borrar el huérfano</span>
+$ kubectl delete \
+    validatingwebhookconfiguration \
+    modelmesh-*
+
+<span class="com"># 2. retry el upgrade</span>
+$ helm upgrade kserve --reuse-values</pre>
+        <div style="background: #F6F8FA; padding: 24px 28px; margin-top: 30px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5;">
+          <b>Lección:</b><br/>
+          5 min de fix · 2 horas de debug. Cuando un install Helm cuelga, mirá los webhooks <i>antes</i> que los pods.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>24</div>
+  </div>
+</section>
+
+<!-- 25. The 3 Helm charts -->
+<section data-label="25 Three Helm charts">
+  <div class="slide-pad">
+    <div class="section-tag">How · 04</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Mi setup — 3 charts de Helm</h1>
+    <h2 class="slide-subtitle">Separados para deploy independiente. Si rompo el frontend no toco el modelo (que tarda ~1 min en cargar).</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; flex: 1;">
+      <div style="border: 2px solid #0086FF; padding: 36px; display:flex; flex-direction: column;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.2em;">CHART 1</div>
+        <h3 style="font-size: 32px; font-weight: 900; margin: 14px 0 20px 0;">model</h3>
+        <div style="font-size: 22px; line-height: 1.5; flex:1;">
+          <span class="mono">InferenceService</span> de KServe.<br/>
+          Despliega vLLM con Qwen3-VL.
+        </div>
+        <div class="mono" style="font-size: 20px; margin-top: 20px; color: #888;">~1 min cold start</div>
+      </div>
+      <div style="border: 2px solid #0086FF; padding: 36px; display:flex; flex-direction: column;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.2em;">CHART 2</div>
+        <h3 style="font-size: 32px; font-weight: 900; margin: 14px 0 20px 0;">api</h3>
+        <div style="font-size: 22px; line-height: 1.5; flex:1;">
+          FastAPI · Python.<br/>
+          Recibe imágenes → base64 → endpoint OpenAI-compatible.
+        </div>
+        <div class="mono" style="font-size: 20px; margin-top: 20px; color: #888;">CPU pod</div>
+      </div>
+      <div style="border: 2px solid #0086FF; padding: 36px; display:flex; flex-direction: column;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.2em;">CHART 3</div>
+        <h3 style="font-size: 32px; font-weight: 900; margin: 14px 0 20px 0;">frontend</h3>
+        <div style="font-size: 22px; line-height: 1.5; flex:1;">
+          nginx · HTML + vanilla JS.<br/>
+          <span class="mono">proxy_pass</span> → api.
+        </div>
+        <div class="mono" style="font-size: 20px; margin-top: 20px; color: #888;">CPU pod, estático</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>25</div>
+  </div>
+</section>
+
+<!-- 26. InferenceService manifest -->
+<section data-label="26 InferenceService manifest">
+  <div class="slide-pad">
+    <div class="section-tag">How · 05</div>
+    <h1 class="slide-title" style="margin-top: 30px;">El manifest — esto es la abstracción</h1>
+    <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 50px; flex: 1;">
+      <pre class="code" style="font-size: 19px;"><span class="kw">apiVersion</span>: serving.kserve.io/v1beta1
+<span class="kw">kind</span>: InferenceService
+<span class="kw">metadata</span>:
+  <span class="kw">name</span>: qwen3-vl
+  <span class="kw">annotations</span>:
+    serving.kserve.io/deploymentMode: <span class="str">RawDeployment</span>
+<span class="kw">spec</span>:
+  <span class="kw">predictor</span>:
+    <span class="kw">model</span>:
+      <span class="kw">modelFormat</span>:
+        <span class="kw">name</span>: vllm
+      <span class="kw">runtime</span>: vllm-runtime
+      <span class="kw">image</span>: vllm/vllm-openai:<span class="err">v0.11.0</span>   <span class="com"># NO :latest</span>
+      <span class="kw">args</span>:
+        - <span class="str">--model=Qwen/Qwen3-VL-4B-Instruct</span>
+        - <span class="str">--dtype=float16</span>
+      <span class="kw">resources</span>:
+        <span class="kw">limits</span>:
+          nvidia.com/gpu: <span class="num">1</span>
+          memory: <span class="str">32Gi</span></pre>
+      <div style="display: flex; flex-direction: column; justify-content: center; gap: 28px;">
+        <div style="font-size: 22px; line-height: 1.55; color: #333;">
+          <b>17 líneas</b> de YAML.<br/><br/>
+          KServe debajo te crea:
+        </div>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;">Deployment</li>
+          <li style="font-size: 22px;">Service</li>
+          <li style="font-size: 22px;">HPA</li>
+          <li style="font-size: 22px;">Ingress / VirtualService</li>
+        </ul>
+        <div style="background: #FFF6F2; padding: 18px 22px; border-left: 4px solid #ED561B; font-size: 22px; line-height: 1.4;">
+          Notar el <span class="mono">image: v0.11.0</span>. <b>No latest.</b> Próxima slide explica.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>26</div>
+  </div>
+</section>
+
+<!-- 27. War story 1 — CUDA 804 -->
+<section data-label="27 War story CUDA 804">
+  <div class="slide-pad">
+    <div class="section-tag" style="color: #ED561B;">War story · cicatriz #3</div>
+    <h1 class="slide-title" style="margin-top: 30px; color: #ED561B;">CUDA forward-compat — Error 804</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag warn" style="margin-bottom: 16px;">SÍNTOMA</div>
+        <pre class="code" style="font-size: 19px;">$ kubectl logs vllm-pod -f
+...
+<span class="err">CUDA error 804: forward compatibility</span>
+<span class="err">  was attempted on non supported HW</span>
+<span class="com"># pod arranca → muere → restart loop</span></pre>
+        <div class="tag warn" style="margin: 30px 0 16px 0;">CAUSA</div>
+        <ul class="bullet-list" style="gap: 12px;">
+          <li style="font-size: 22px;"><span class="mono">vllm:latest</span> ships <b>CUDA 13</b></li>
+          <li style="font-size: 22px;">Host driver 570.144 = <b>CUDA 12.8</b></li>
+          <li style="font-size: 22px;">RTX 4090 = consumer → <span style="color:#ED561B;">no soporta forward-compat</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="tag ok" style="margin-bottom: 16px;">FIX</div>
+        <pre class="code" style="font-size: 19px;"><span class="com"># Pin a la única ventana válida</span>
+<span class="com"># CUDA 12.x + soporte qwen3_vl</span>
+
+<span class="kw">image</span>: vllm/vllm-openai:<span class="ok">v0.11.0</span></pre>
+        <div style="background: #F6F8FA; padding: 24px 28px; margin-top: 30px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5;">
+          <b>Lección:</b><br/>
+          Nunca <span class="mono">:latest</span> en cargas que tocan kernel/driver. Por eso el manifest pinnea v0.11.0.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>27</div>
+  </div>
+</section>
+
+<!-- 28. Single-GPU scheduling -->
+<section data-label="28 Single-GPU scheduling">
+  <div class="slide-pad">
+    <div class="section-tag">How · 06</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Scheduling con una sola GPU</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; flex: 1;">
+      <div>
+        <ul class="bullet-list">
+          <li>RTX 4090 schedulable como <span class="mono">nvidia.com/gpu: 1</span></li>
+          <li><b>Un pod a la vez</b> puede tomarla.</li>
+          <li><span style="color:#ED561B; font-weight:700;">No MIG</span> en consumer GPUs.</li>
+          <li>Time-slicing existe — agrega contention. Para vLLM no vale.</li>
+          <li>Resultado: cola serializada. <b>Esto importa para el rollout.</b></li>
+        </ul>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; align-self: center;">
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.15em; color: #888; margin-bottom: 20px;">EL CUELLO DE BOTELLA</div>
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display:flex; align-items:center; gap: 16px;">
+            <div class="box fill-blue" style="width: 220px;">pod-A · Running</div>
+            <div style="font-family:monospace; font-size: 22px;">→</div>
+            <div style="font-family:monospace; font-size: 22px; color: #50B432;">tiene la GPU</div>
+          </div>
+          <div style="display:flex; align-items:center; gap: 16px;">
+            <div class="box" style="width: 220px; border-style: dashed; color: #888;">pod-B · Pending</div>
+            <div style="font-family:monospace; font-size: 22px;">→</div>
+            <div style="font-family:monospace; font-size: 22px; color: #ED561B;">Insufficient gpu</div>
+          </div>
+          <div style="display:flex; align-items:center; gap: 16px;">
+            <div class="box" style="width: 220px; border-style: dashed; color: #888;">pod-C · Pending</div>
+            <div style="font-family:monospace; font-size: 22px;">→</div>
+            <div style="font-family:monospace; font-size: 22px; color: #ED561B;">Insufficient gpu</div>
+          </div>
+        </div>
+        <div style="margin-top: 22px; font-size: 22px; color: #666;">→ próxima cicatriz</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>28</div>
+  </div>
+</section>
+
+<!-- 29. War story 4 — Rolling deadlock -->
+<section data-label="29 War story Rolling deadlock">
+  <div class="slide-pad">
+    <div class="section-tag" style="color: #ED561B;">War story · cicatriz #4</div>
+    <h1 class="slide-title" style="margin-top: 30px; color: #ED561B;">Rolling update deadlock</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag warn" style="margin-bottom: 16px;">SÍNTOMA</div>
+        <pre class="code" style="font-size: 19px;">$ kubectl get pods
+NAME            STATUS    AGE
+vllm-old-xxx    <span class="ok">Running</span>   2d
+vllm-new-yyy    <span class="err">Pending</span>   <span class="err">∞</span>
+
+<span class="com"># Insufficient nvidia.com/gpu</span></pre>
+        <div class="tag warn" style="margin: 30px 0 16px 0;">CAUSA</div>
+        <ul class="bullet-list" style="gap: 12px;">
+          <li style="font-size: 22px;">RollingUpdate asume <b>N+1</b> réplicas posibles</li>
+          <li style="font-size: 22px;">Con <b>1 GPU</b> eso no es cierto</li>
+          <li style="font-size: 22px;">Nuevo no arranca hasta que viejo libere; viejo no libera hasta que nuevo esté Ready</li>
+          <li style="font-size: 22px;"><span style="color:#ED561B; font-weight:700;">Deadlock infinito.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="tag ok" style="margin-bottom: 16px;">FIX</div>
+        <pre class="code" style="font-size: 19px;"><span class="kw">spec</span>:
+  <span class="kw">strategy</span>:
+    <span class="kw">type</span>: <span class="ok">Recreate</span>
+    <span class="com"># NO RollingUpdate</span></pre>
+        <div style="background: #F6F8FA; padding: 24px 28px; margin-top: 30px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5;">
+          <b>Lección:</b><br/>
+          Cuando hay <b>un solo recurso scarce</b> (GPU, IP estática, port host) → <span class="mono">Recreate</span>. Hay un blip de ~30s downtime, pero el rollout completa.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>29</div>
+  </div>
+</section>
+
+<!-- 30. End-to-end request -->
+<section data-label="30 End-to-end request">
+  <div class="slide-pad">
+    <div class="section-tag">How · 07</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Una request, end-to-end</h1>
+    <div style="flex: 1; display:flex; flex-direction: column; justify-content: center; gap: 34px;">
+      <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; align-items: center;">
+        <div class="box fill-stone" style="font-size: 18px; padding: 18px 12px;">cliente<br/>upload imagen</div>
+        <div style="text-align:center; font-size: 26px; color: #0086FF;">→</div>
+        <div class="box" style="font-size: 18px; padding: 18px 12px;">nginx<br/>frontend</div>
+        <div style="text-align:center; font-size: 26px; color: #0086FF;">→</div>
+        <div class="box" style="font-size: 18px; padding: 18px 12px;">FastAPI<br/>base64</div>
+        <div style="text-align:center; font-size: 26px; color: #0086FF;">→</div>
+        <div class="box fill-blue" style="font-size: 18px; padding: 18px 12px;">KServe<br/>InferenceService</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 14px; align-items: center;">
+        <div class="box fill-stone" style="font-size: 18px; padding: 18px 12px;">cliente<br/>recibe texto</div>
+        <div style="text-align:center; font-size: 26px; color: #0086FF;">←</div>
+        <div class="box" style="font-size: 18px; padding: 18px 12px;">nginx</div>
+        <div style="text-align:center; font-size: 26px; color: #0086FF;">←</div>
+        <div class="box" style="font-size: 18px; padding: 18px 12px;">FastAPI<br/>respuesta</div>
+        <div style="text-align:center; font-size: 26px; color: #0086FF;">←</div>
+        <div class="box fill-blue" style="font-size: 18px; padding: 18px 12px;">vLLM pod<br/>GPU inference</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 50px; margin-top: 30px; font-size: 24px;">
+      <div><b style="color:#0086FF;">Latencia típica:</b> <span class="mono">~800ms</span> para una imagen OCR.</div>
+      <div style="color:#666;">No es realtime, pero es interactivo.</div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>30</div>
+  </div>
+</section>
+
+<!-- 31. NEW MRZ -->
+<section data-label="31 MRZ">
+  <div class="slide-pad">
+    <div class="section-tag">How · 08</div>
+    <h1 class="slide-title" style="margin-top: 30px;">MRZ — trust but verify</h1>
+
+    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <!-- passport placeholder -->
+        <div style="background: linear-gradient(135deg, #1A3A6B 0%, #0F2547 100%); color: white; padding: 32px 36px; border-radius: 8px; font-family: Consolas, Menlo, monospace;">
+          <div style="font-size: 14px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.7; margin-bottom: 28px;">PASSPORT · ICAO 9303</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; font-size: 18px; margin-bottom: 28px;">
+            <div><span style="opacity: 0.6;">Surname</span><br/>HERNANDEZ</div>
+            <div><span style="opacity: 0.6;">Given names</span><br/>JEFFRY</div>
+            <div><span style="opacity: 0.6;">Nationality</span><br/>COL</div>
+            <div><span style="opacity: 0.6;">Date of birth</span><br/>15 MAR 1990</div>
+          </div>
+          <div style="border-top: 1px dashed rgba(255,255,255,0.3); padding-top: 18px; margin-top: 12px;">
+            <div style="font-size: 13px; opacity: 0.6; letter-spacing: 0.2em; margin-bottom: 10px;">MACHINE READABLE ZONE</div>
+            <div style="background: rgba(255,237,180,0.95); color: #000; padding: 14px 18px; font-size: 18px; line-height: 1.6; letter-spacing: 0.05em; border-radius: 3px;">
+              P&lt;COLHERNANDEZ&lt;&lt;JEFFRY&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br/>
+              AB1234567<span style="background: #50B432; color: white; padding: 0 4px;">5</span>COL9003158M3001012<span style="background: #50B432; color: white; padding: 0 4px;">8</span>&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+            </div>
+            <div style="font-size: 16px; opacity: 0.7; margin-top: 12px;"><span style="display:inline-block; width:14px; height:14px; background: #50B432; vertical-align: middle; margin-right: 8px;"></span>= check digit</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 22px; color: #555; margin-bottom: 18px;">El modelo <b>extrae</b>, vos <b>validás</b>:</div>
+        <pre class="code" style="font-size: 19px;">{
+  <span class="key">"surname"</span>: <span class="str">"HERNANDEZ"</span>,
+  <span class="key">"given_names"</span>: <span class="str">"JEFFRY"</span>,
+  <span class="ok">"passport_number"</span>: <span class="str">"AB1234567"</span>,   <span class="com">// ✓ MRZ</span>
+  <span class="ok">"date_of_birth"</span>:    <span class="str">"1990-03-15"</span>,  <span class="com">// ✓ MRZ</span>
+  <span class="ok">"date_of_expiry"</span>:   <span class="str">"2030-01-01"</span>,  <span class="com">// ✓ MRZ</span>
+  <span class="ok">"sex"</span>:             <span class="str">"M"</span>,           <span class="com">// ✓ MRZ</span>
+  <span class="key">"nationality"</span>:   <span class="str">"COL"</span>
+}</pre>
+        <div style="background: #F0FBEF; padding: 22px 26px; margin-top: 28px; border-left: 4px solid #50B432; font-size: 22px; line-height: 1.45;">
+          <b style="color: #2E7D2E;">4 campos</b> validados deterministicamente con check digits ICAO 9303.
+        </div>
+      </div>
+    </div>
+
+    <div style="background: #0086FF; color: white; padding: 22px 30px; margin-top: 30px; font-size: 26px; font-weight: 900; line-height: 1.4;">
+      Cuando puedas validar deterministicamente, hacelo.<br/>
+      <span style="opacity: 0.85; font-weight: 400;">El modelo es el último recurso, no el primero.</span>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>31</div>
+  </div>
+</section>
+
+<!-- 32. NEW Frontend mínimo -->
+<section data-label="32 Frontend minimo">
+  <div class="slide-pad">
+    <div class="section-tag">How · 09</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Frontend mínimo, intencional</h1>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; flex:1;">
+      <div>
+        <pre class="code" style="font-size: 22px;">frontend/
+├── index.html       <span class="com"># 1 archivo</span>
+├── app.js           <span class="com"># vanilla JS, fetch()</span>
+└── nginx.conf       <span class="com"># proxy_pass /api/*</span></pre>
+        <div style="font-size: 24px; line-height: 1.55; margin-top: 36px;">
+          Vanilla HTML + JS + nginx que reverse-proxea <span class="mono">/api/*</span>.<br/><br/>
+          <b>A propósito sin React, Next, Vite, Tailwind.</b>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; justify-content:center; gap: 24px;">
+        <div style="font-size: 22px; color: #888; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;">¿Por qué?</div>
+        <div style="font-size: 26px; line-height: 1.55;">
+          El lab es del <b style="color: #0086FF;">backend</b>.<br/>
+          El frontend es el más simple posible para no robar foco — ni del demo, ni del debugging, ni de la conversación.
+        </div>
+        <div style="background: #F6F8FA; padding: 22px 28px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5; margin-top: 14px;">
+          Cuando todo es complejidad, nada se distingue. Mantener una capa simple deja que las complejas se vean.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>32</div>
+  </div>
+</section>
+
+<!-- 33. Costs -->
+<section data-label="33 Costs">
+  <div class="slide-pad">
+    <div class="section-tag">How · 10</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Costos — la verdad numérica</h1>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 80px; flex: 1; align-items: center;">
+      <div>
+        <div style="font-size: 24px; color: #888; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 14px;">Spot</div>
+        <div style="font-size: 200px; font-weight: 900; color: #0086FF; line-height: 0.9; letter-spacing: -0.04em;">$4<span style="font-size: 80px;">.50</span></div>
+        <div style="font-size: 28px; color: #555; margin-top: 14px;">por mes · TensorDock</div>
+        <div style="margin-top: 30px; font-size: 22px; color: #666; line-height: 1.5;">Cuando el spot se cae, el bootstrap script tarda ~10 min en levantar otra instancia.</div>
+      </div>
+      <div>
+        <div style="font-size: 24px; color: #888; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 14px;">On-demand</div>
+        <div style="font-size: 140px; font-weight: 900; color: #444; line-height: 0.9; letter-spacing: -0.04em;">$35</div>
+        <div style="font-size: 28px; color: #555; margin-top: 14px;">por mes · si lo dejara fijo</div>
+        <div style="background: #F6F8FA; padding: 24px 28px; margin-top: 36px; border-left: 4px solid #50B432; font-size: 22px; line-height: 1.5;">
+          <b>Demo personal</b> → spot vale la pena.<br/>
+          <b>Producción real</b> → on-demand y SLA.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>33</div>
+  </div>
+</section>
+
+<!-- 34. DEMO transition -->
+<section data-label="34 Demo">
+  <div style="position:absolute; inset:0; background: #0086FF; color: white; display:flex; flex-direction:column; justify-content:center; padding: 0 110px;">
+    <div style="font-size: 28px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 32px;">DEMO TIME</div>
+    <h1 style="font-size: 220px; font-weight: 900; line-height: 0.95; margin: 0 0 40px 0; letter-spacing: -0.025em;">OCR<br/>en vivo.</h1>
+    <div style="font-size: 30px; opacity: 0.92; max-width: 1500px; line-height: 1.5;">
+      Subir una imagen &nbsp;·&nbsp; ver el OCR &nbsp;·&nbsp; logs de vLLM &nbsp;·&nbsp; HPA &nbsp;·&nbsp; <span class="mono">nvidia-smi</span>.
+    </div>
+    <div style="margin-top: 60px; font-size: 26px; opacity: 0.85; font-style: italic;">Si rompe — mejor. Es exactamente el punto de la próxima sección.</div>
+  </div>
+</section>
+
+<!-- 35. LESSONS divider -->
+<section data-label="35 LESSONS divider">
+  <div class="divider">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 04 / 04</div>
+    <h1>Lessons</h1>
+    <div class="divider-sub">Las cicatrices ya las contamos en su contexto. Acá: los pins que vos ponés, la división honesta, y el takeaway.</div>
+  </div>
+</section>
+
+<!-- 36. The 4 pins -->
+<section data-label="36 The 4 pins">
+  <div class="slide-pad">
+    <div class="section-tag">Lessons · resumen</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Los 4 pins que <span style="color:#0086FF;">vos</span> ponés</h1>
+    <h2 class="slide-subtitle">No los pone KServe. No los pone vLLM. No los pone Kubernetes. Los ponés vos.</h2>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; flex: 1;">
+      <div style="border: 2px solid #0086FF; padding: 32px 26px;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.2em;">PIN · 01</div>
+        <h3 style="font-size: 28px; font-weight: 900; margin: 14px 0;">Image tag</h3>
+        <div style="font-size: 20px; line-height: 1.5; color: #444;">No <span class="mono">:latest</span>. Nunca. Pin a la versión que corresponde a tu CUDA.</div>
+      </div>
+      <div style="border: 2px solid #0086FF; padding: 32px 26px;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.2em;">PIN · 02</div>
+        <h3 style="font-size: 28px; font-weight: 900; margin: 14px 0;">Kernel</h3>
+        <div style="font-size: 20px; line-height: 1.5; color: #444;"><span class="mono">apt-mark hold</span>, grub default. O DKMS para sobrevivir kernel updates.</div>
+      </div>
+      <div style="border: 2px solid #0086FF; padding: 32px 26px;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.2em;">PIN · 03</div>
+        <h3 style="font-size: 28px; font-weight: 900; margin: 14px 0;">Driver</h3>
+        <div style="font-size: 20px; line-height: 1.5; color: #444;">DKMS si podés. Si no, pin manual y monitoreá <span class="mono">nvidia-smi</span> post-reboot.</div>
+      </div>
+      <div style="border: 2px solid #0086FF; padding: 32px 26px;">
+        <div style="font-size: 24px; font-weight: 700; color: #0086FF; letter-spacing: 0.2em;">PIN · 04</div>
+        <h3 style="font-size: 28px; font-weight: 900; margin: 14px 0;">Strategy</h3>
+        <div style="font-size: 20px; line-height: 1.5; color: #444;"><span class="mono">Recreate</span> cuando el recurso es <b>scarce</b>. RollingUpdate asume N+1.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>36</div>
+  </div>
+</section>
+
+<!-- 37. CONSOLIDATED 80/20 -->
+<section data-label="37 KServe 80 vs You 20">
+  <div class="slide-pad">
+    <div class="section-tag">Lessons · honesto</div>
+    <h1 class="slide-title" style="margin-top: 30px;">La división honesta</h1>
+    <h2 class="slide-subtitle">Donde termina KServe, empezás vos.</h2>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 40px; flex: 1;">
+      <div style="background: #F0F7FF; padding: 36px 36px; border-top: 6px solid #0086FF;">
+        <div style="display: flex; align-items: baseline; gap: 16px; margin-bottom: 26px;">
+          <div style="font-size: 84px; font-weight: 900; color: #0086FF; line-height: 1;">80%</div>
+          <div style="font-size: 26px; font-weight: 900; color: #0086FF;">KSERVE</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap: 22px;">
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#50B432; font-weight:900; font-size: 22px; line-height: 1.4;">✓</span><span style="font-size: 22px; line-height: 1.4;"><b>InferenceService CRD</b> — un manifest, todo el plumbing</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#50B432; font-weight:900; font-size: 22px; line-height: 1.4;">✓</span><span style="font-size: 22px; line-height: 1.4;"><b>Routing</b> — predictor + transformer + explainer</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#50B432; font-weight:900; font-size: 22px; line-height: 1.4;">✓</span><span style="font-size: 22px; line-height: 1.4;"><b>Autoscaling</b> — HPA o KPA</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#50B432; font-weight:900; font-size: 22px; line-height: 1.4;">✓</span><span style="font-size: 22px; line-height: 1.4;"><b>Canary &amp; traffic split</b></span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#50B432; font-weight:900; font-size: 22px; line-height: 1.4;">✓</span><span style="font-size: 22px; line-height: 1.4;"><b>Multi-runtime</b> — vLLM, Triton, HF</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#50B432; font-weight:900; font-size: 22px; line-height: 1.4;">✓</span><span style="font-size: 22px; line-height: 1.4;"><b>Storage</b> — S3, GCS, HF Hub, PVC</span></div>
+        </div>
+      </div>
+
+      <div style="background: #FFF6F2; padding: 36px 36px; border-top: 6px solid #ED561B;">
+        <div style="display: flex; align-items: baseline; gap: 16px; margin-bottom: 26px;">
+          <div style="font-size: 84px; font-weight: 900; color: #ED561B; line-height: 1;">20%</div>
+          <div style="font-size: 26px; font-weight: 900; color: #ED561B;">VOS</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap: 22px;">
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#ED561B; font-weight:900; font-size: 22px; line-height: 1.4;">✗</span><span style="font-size: 22px; line-height: 1.4;"><b>Pins</b> — KServe no sabe tu CUDA</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#ED561B; font-weight:900; font-size: 22px; line-height: 1.4;">✗</span><span style="font-size: 22px; line-height: 1.4;"><b>Cuotas y costos</b> — no negocia con tu cloud</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#ED561B; font-weight:900; font-size: 22px; line-height: 1.4;">✗</span><span style="font-size: 22px; line-height: 1.4;"><b>Observabilidad</b> — el dashboard lo armás vos</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#ED561B; font-weight:900; font-size: 22px; line-height: 1.4;">✗</span><span style="font-size: 22px; line-height: 1.4;"><b>El modelo</b> — KServe sirve, no entrena</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#ED561B; font-weight:900; font-size: 22px; line-height: 1.4;">✗</span><span style="font-size: 22px; line-height: 1.4;"><b>Stack de GPU</b> — driver, toolkit, plugin</span></div>
+          <div style="display:flex; gap: 14px; align-items: flex-start;"><span style="color:#ED561B; font-weight:900; font-size: 22px; line-height: 1.4;">✗</span><span style="font-size: 22px; line-height: 1.4;"><b>Conocer tu stack</b> — esto es el trabajo</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer">
+    <div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div>
+    <div>37</div>
+  </div>
+</section>
+
+<!-- 38. Takeaway -->
+<section data-label="38 Takeaway">
+  <div style="position:absolute; inset:0; background: #0086FF; color: white; display:flex; flex-direction:column; justify-content:center; padding: 0 110px;">
+    <div style="font-size: 26px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 32px;">SI SE LLEVAN UNA SOLA COSA</div>
+    <h1 style="font-size: 88px; font-weight: 900; line-height: 1.05; margin: 0 0 50px 0; letter-spacing: -0.02em; max-width: 1600px;">
+      Servir AI en K8s con un solo dev<br/>y ~$4/mes <span style="opacity: 0.6;">ya es factible.</span>
+    </h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; max-width: 1700px;">
+      <div style="font-size: 28px; line-height: 1.55; opacity: 0.95;">
+        KServe hace el <b>80%</b> pesado.<br/>
+        El <b>20%</b> restante — los pins, el kernel, el driver, el rollout strategy — lo ponés vos.
+      </div>
+      <div style="font-size: 28px; line-height: 1.55; opacity: 0.95; border-left: 3px solid white; padding-left: 30px;">
+        No hay magia debajo del framework.<br/>
+        Si te sale mal — <b>conocer tu stack es el trabajo.</b>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 39. Resources / Q&A -->
+<section data-label="39 Resources Q&amp;A">
+  <div class="slide-pad">
+    <h1 class="slide-title" style="font-size: 96px;">Gracias.</h1>
+    <h2 class="slide-subtitle" style="font-size: 32px; max-width: 1400px;">Preguntas, código, links — todo abajo.</h2>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; flex: 1; margin-top: 20px;">
+      <div>
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF; margin-bottom: 18px;">CÓDIGO &amp; SLIDES</div>
+        <div style="font-family: Consolas, Menlo, monospace; font-size: 28px; line-height: 1.8;">
+          github.com/<b>jeffincloud</b>
+        </div>
+        <div style="font-size: 22px; color: #555; line-height: 1.6; margin-top: 18px;">
+          Bootstrap script · 3 charts de Helm · InferenceService manifest · esta presentación.
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF; margin-bottom: 18px;">CONTACTO</div>
+        <div style="font-family: Consolas, Menlo, monospace; font-size: 26px; line-height: 1.8;">
+          linkedin.com/in/<b>jeffry-hernandez</b>
+        </div>
+        <div style="font-size: 22px; color: #555; line-height: 1.6; margin-top: 18px;">
+          Jeffry Hernandez · Senior SRE · Wizeline
+        </div>
+      </div>
+    </div>
+    <div style="margin-top: auto; display:flex; align-items:center; justify-content:space-between; padding-top: 40px; border-top: 1px solid #ddd;">
+      <div style="display:flex; align-items:center; gap: 20px;">
+        <img src="assets/image10.png" alt="CNCG" style="height: 56px;" />
+        <div style="font-size: 24px; color: #888;">CNCG Cali · Abril 2026</div>
+      </div>
+      <div style="font-size: 30px; font-weight: 900; color: #0086FF;">Q &amp; A</div>
+    </div>
+  </div>
+</section>
+
+</deck-stage>
+</body>
+</html>

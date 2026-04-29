@@ -1,0 +1,35 @@
+image:
+  repository: ghcr.io/REPLACE_ME/ocr-lab-api
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# Env passed to the FastAPI container. Anything here is exposed verbatim.
+env:
+  OCR_BACKEND: "openai"
+  OPENAI_BASE_URL: "http://qwen3-vl-4b-predictor.default.svc.cluster.local"
+  OPENAI_MODEL_NAME: "qwen3-vl-4b"
+  OPENAI_TIMEOUT: "60"
+  MAX_IMAGE_DIM: "1024"
+  # Set to a comma-separated origin list to opt into CORS. Leave blank when
+  # the frontend reverse-proxies /api (the cluster default).
+  ALLOWED_ORIGINS: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+probes:
+  readinessPath: /healthz
+  livenessPath: /healthz
+  initialDelaySeconds: 5
+  periodSeconds: 10

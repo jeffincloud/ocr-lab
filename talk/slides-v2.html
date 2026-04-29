@@ -1,0 +1,1219 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Deploying AI-Native Apps on Kubernetes — CNCG Cali</title>
+<link rel="stylesheet" href="styles.css" />
+<script src="deck-stage.js"></script>
+<script type="application/json" id="speaker-notes">[
+"Buenas. Soy Jeffry Hernandez, Senior SRE en Wizeline. La charla de hoy es sobre cómo desplegar aplicaciones AI-native en Kubernetes — específicamente, cómo KServe resuelve el problema de servir modelos, y cómo apliqué eso a un caso real de OCR de pasaportes. El código está en mi repo, lo enlazo al final.",
+"El primer punto que quiero establecer: las aplicaciones de esta década son AI-native. En el stack tradicional, frontend habla con un backend que habla con una base de datos. En el stack moderno, hay un componente más — el modelo — que ya no es un add-on opcional. Es parte del core. Y servirlo no es un detalle, es una preocupación de plataforma de primer orden.",
+"Cuatro cosas vamos a cubrir. Primero, qué problema resuelve KServe — por qué necesitamos un framework de serving en lugar de un Deployment normal. Segundo, qué es KServe y cómo se modela. Tercero, cómo lo apliqué a un caso real de OCR. Y cuarto, demo en vivo del sistema corriendo.",
+"Sección uno: el problema. Por qué Kubernetes para AI, qué tiene de no trivial servir modelos, y qué opciones hay en el ecosistema.",
+"Por qué Kubernetes para AI. Cuatro razones reales. Una, GPU scheduling — Kubernetes ya sabe gestionar recursos escasos como un device. Dos, autoscaling para cargas spiky — la inferencia es ráfagas, no constante. Tres, multi-tenancy — múltiples modelos, múltiples equipos, mismo cluster. Cuatro, ecosystem — observability, ingress, secrets, RBAC. Todo eso ya lo tenés. No se reinventa para AI.",
+"Servir un modelo no es Flask más model.predict. Lo que necesitás de verdad: batching para usar GPU eficientemente, gestión de GPU, queueing cuando llegan más requests que las que el modelo procesa, observability con métricas específicas de inferencia, rollouts seguros porque un modelo nuevo puede ser peor que el viejo, y versioning. Esa lista de la derecha es la diferencia entre un script y un sistema de producción.",
+"Las opciones para servir en K8s. DIY es viable — Deployment más Service más container custom, vos hacés todo. Funciona, pero estás reinventando primitives. Frameworks: KServe, Seldon Core, BentoML, Ray Serve. Cada uno tiene su nicho. KServe está bajo CNCF, declarativo, y se integra naturalmente con el resto del ecosistema cloud-native. Esa es la dirección que tomé.",
+"Transición. KServe es la solución de facto en este espacio. Vamos a ver por qué.",
+"Sección dos: KServe. Qué es, cómo se modela, y cuáles son las decisiones que tenés que tomar cuando lo adoptás.",
+"KServe es un proyecto CNCF en estado incubating. La idea central: declarativo sobre Kubernetes. Vos describís el modelo que querés servir como un recurso de alto nivel — un InferenceService — y KServe arma todo el plumbing debajo. Deployment, Service, HPA, Ingress, routing. La frase que me sirve para recordar: vos declarás el qué, KServe arma el cómo.",
+"El modelo mental tiene cinco componentes. InferenceService es el CR de alto nivel, lo que vos escribís. ServingRuntime define cómo se sirve — el container, los args. Predictor es el motor de inferencia — el pod corriendo. Transformer es opcional, para pre o post-procesado. Explainer también opcional, para explicabilidad. La mayoría de casos son InferenceService más ServingRuntime más Predictor.",
+"KServe trae runtimes built-in para los frameworks comunes — sklearn, xgboost, pytorch, tensorflow, huggingface. Si tu modelo encaja en uno de esos, levantarlo es un manifest y nada más. Si no encaja — caso mío — definís un ServingRuntime custom apuntando a cualquier container que exponga HTTP o gRPC. La extensibilidad es real.",
+"Una decisión importante al instalar KServe: RawDeployment versus modo Serverless basado en Knative. RawDeployment usa Deployment más HPA estándar. Serverless usa Knative — trae scale-to-zero, cold starts, más operadores. Si tenés muchos modelos con tráfico bursty y querés pagar cero cuando no hay tráfico, Knative tiene sentido. Para mi caso — un modelo, una GPU — RawDeployment gana por simplicidad.",
+"Cómo se ve un InferenceService en YAML. Diez líneas, esencialmente. Especificás el modelFormat, el runtime, la imagen, los recursos. KServe debajo te crea Deployment, Service, HPA, Ingress. Esto es lo que abstrae: todo el plumbing de un serving stack atrás de un solo CRD.",
+"Lo que K8s te resuelve y lo que no. Lo que sí: scheduling, replicación, ingress, secrets, network policies. Eso ya lo conocés. Lo que no: drivers de GPU del host, configuración del runtime, image tags, y el kernel del nodo. Eso queda como decisión de stack que vos tomás. Lo importante es saber que existe esa frontera.",
+"Adopción. KServe se usa en producción en organizaciones que sirven modelos a escala. Se integra con Istio para service mesh, ArgoCD para GitOps, Knative para serverless. Es parte del ecosistema, no una isla.",
+"Transición. Hasta acá fue framework. Ahora vamos al caso real: cómo apliqué KServe a un sistema de OCR de pasaportes.",
+"Sección tres: el ejercicio. Qué construí, por qué OCR, por qué Qwen, y cuál es el pipeline completo.",
+"Construí una aplicación que extrae datos estructurados de fotos de pasaportes. Input: una imagen JPG o PNG. Output: un JSON con surname, given_names, passport_number, fechas, y la MRZ — la Machine Readable Zone. Acá hay un placeholder para el screenshot del frontend con un pasaporte cargado y el JSON visible. Lo voy a reemplazar con la captura real.",
+"Por qué OCR. Es un caso de uso real — onboarding KYC, control de fronteras, viajes corporativos. Es multimodal genuino, no chat. Y necesita un VLM, un Vision-Language Model, no un LLM puro. Eso lo hace un buen ejercicio para mostrar cómo KServe maneja un runtime que no es un text-only model.",
+"Por qué Qwen3-VL-4B. Tres razones. Una, open weights con licencia Apache 2.0 — puedo self-hostearlo sin restricciones. Dos, entra en 24 gigas de VRAM en FP16, lo que me permite correrlo en una GPU consumer. Tres, soporta imágenes y JSON estructurado out-of-the-box. Las alternativas — GPT-4V, Gemini — son APIs cerradas, no self-hosted. Para una demo de KServe necesito algo que corra en mi cluster.",
+"El pipeline end-to-end. Imagen entra, se hace resize para no mandar archivos enormes, va al InferenceService donde vLLM corre Qwen3-VL en la GPU, sale un JSON crudo, lo parseamos, validamos la MRZ contra check digits ICAO 9303, y los campos validados deterministicamente overridean al modelo. La idea: el VLM puede alucinar, pero la MRZ tiene check digits — si validan, son verdad.",
+"Sección cuatro: implementación. La parte más densa de la charla. Cómo se ve la arquitectura, el stack, y las decisiones de ingeniería que tomé en el camino.",
+"Tres microservicios en K3s. Browser hace request a Traefik, que es el ingress que viene con K3s. Traefik enruta al frontend nginx para assets estáticos, y al API FastAPI para llamadas. La API a su vez le pega al InferenceService de KServe, que rutea al pod de vLLM, que corre Qwen3-VL. Acá va el diagrama Mermaid de la arquitectura, lo voy a reemplazar.",
+"El stack. K3s como base. KServe v0.14 en modo RawDeployment. vLLM como inference server. Qwen3-VL-4B como modelo. cert-manager porque KServe lo necesita para webhooks. NVIDIA Device Plugin para exponer la GPU. Y arriba, tres charts de Helm — model, api, frontend — separados para deploy independiente.",
+"Por qué K3s y no Kubernetes completo. Para serving single-node, K3s es el sweet spot. Un binario, install en sesenta segundos, trae Traefik y local-path-provisioner por default. Suficiente para correr KServe y los workloads de inferencia. Si fueran múltiples nodos cambiaría el cálculo.",
+"Por qué RawDeployment y no Knative. Con una GPU única, scale-to-zero no tiene sentido — el pod tarda alrededor de un minuto en cargar el modelo, así que el cold start dolería. Y hay menos operadores corriendo, menos cosas que pueden fallar. Para este caso, la simplicidad gana.",
+"Primera decisión de ingeniería: el runtime built-in de HuggingFace en KServe v0.14 trae una versión de vLLM que no reconoce qwen3_vl. Tuve que definir un ServingRuntime custom apuntando directamente a vllm/vllm-openai. Es exactamente el caso de extensibilidad del que hablábamos: cuando lo built-in no alcanza, definís el tuyo.",
+"Segunda decisión: el esquema hf:// no es URI válido en KServe v0.14. El validador acepta gs, s3, pvc, file y https — pero no hf. La solución que tomé: hardcodear el HF model id en el flag --model del runtime, y dejar que vLLM lo descargue al startup. Funciona; el costo es que la descarga ocurre en el primer arranque del pod.",
+"Tercera decisión: pinné la imagen de vLLM a v0.11.0. La versión 0.10.x no soporta qwen3_vl, y la 0.11.2 en adelante usa CUDA 13 — mi host driver es CUDA 12.8. La ventana válida quedó en v0.11.0 a v0.11.1. Esta es una decisión de stack que el framework no puede tomar por vos: KServe no sabe qué versión de CUDA tiene tu driver.",
+"Cuarta decisión: con una GPU única, la estrategia de rollout RollingUpdate genera un deadlock — el pod nuevo queda Pending por Insufficient nvidia.com/gpu mientras el viejo está Running. Cambié a strategy Recreate. Hay un blip de downtime durante el rollout, pero completa. Cuando un recurso es scarce, RollingUpdate asume N+1 réplicas posibles y eso no se cumple.",
+"Quinta decisión: encontrar GPU disponible no es trivial. GCP me rechazó por service usage history, Vultr estaba account-gated, Lambda Labs no aceptó la tarjeta, Azure tenía mi quota ticket en revisión. Terminé en TensorDock con una RTX 4090. El punto no es el precio — el punto es que el quota de GPU es una constraint real de infra que afecta el diseño antes de empezar.",
+"La capa de API. Un detalle de implementación: el código tiene un switch OCR_BACKEND que acepta ollama u openai. Por qué dos backends. Para desarrollo local uso Ollama, que es más liviano y corre en mi laptop. Para el cluster uso vLLM. Ambos exponen una API compatible OpenAI, así que el código de la API es el mismo — solo cambia la base URL.",
+"MRZ — trust but verify. El VLM lee la imagen y nos da campos. Pero el VLM puede alucinar. La MRZ — Machine Readable Zone — sigue el estándar ICAO 9303 TD3, con check digits para passport_number, date_of_birth, date_of_expiry, y el composite. Si la MRZ valida, sus campos overridean al VLM. Es un guardrail determinístico encima de una capa probabilística.",
+"Provisioning end-to-end. Un solo comando — scripts/provision.sh — orquesta todo. Bootstrap.sh corre en la VM e instala K3s, drivers, container toolkit, y pinea el kernel. Después install-cluster-deps.sh corre localmente con el kubeconfig, instala el device plugin, cert-manager, y KServe. Y al final, helm install para los tres charts. Acá va el screenshot del tree del repo. La idea: del setup inicial al sistema corriendo es un comando.",
+"Sección cinco: resultados y demo.",
+"Resultados. Latencia end-to-end de cinco a nueve segundos por imagen — la mayor parte es la inferencia del modelo. La validación MRZ funciona cuando el pasaporte tiene la zona MRZ legible, que es la mayoría de los casos modernos. El JSON que sale es estructurado y consistente — eso es lo que más me importaba para encadenarlo con el resto del sistema. Caveats: pasaportes muy dañados o con MRZ ilegible caen al modelo solo, sin override determinístico.",
+"Demo en vivo. Tres cosas van a ver. Una, el frontend — subo un pasaporte, el JSON aparece. Dos, kubectl get inferenceservice y los pods asociados, para que vean lo que KServe creó debajo. Tres, kubectl logs del pod de vLLM en tiempo real, para ver la inferencia ocurriendo.",
+"Lo que vieron. KServe orquestó la request — desde el ingress hasta el pod. vLLM corrió Qwen3-VL en la GPU, en una request de inferencia normal. Y la MRZ validó deterministicamente los campos críticos, dándonos un guardrail encima del modelo. Tres capas: framework, runtime, validación. Cada una con su responsabilidad clara.",
+"El takeaway. KServe es la solución de facto para servir modelos de AI en Kubernetes. El framework hace el grueso del trabajo de serving — deployments, scaling, routing, abstracciones de storage. Las decisiones de stack — qué runtime, qué image tag, qué strategy — las tomás vos, sabiendo que existen. La frontera es clara y conocerla es lo que separa un deploy que funciona de uno que rompe a las dos semanas.",
+"Recursos. Repo en github.com/jeffincloud — manifests, charts, scripts de provisioning, y esta presentación. Para preguntas: jeffincloud en GitHub, jeffry-hernandez en LinkedIn. Y para arrancar la conversación: ¿cuál creen que es la pieza más frágil de este stack? Esa es la pregunta que me hago cada vez que toco una versión."
+]</script>
+</head>
+<body>
+<deck-stage width="1920" height="1080">
+
+<!-- 1. Title -->
+<section data-label="01 Title" style="background: linear-gradient(135deg, #0086FF 0%, #058DC7 100%); color: white;">
+  <div style="position:absolute; inset:0; padding: 110px; display:flex; flex-direction:column; justify-content:space-between;">
+    <div style="display:flex; align-items:center; gap: 20px;">
+      <img src="assets/image10.png" alt="CNCG" style="height: 64px; background: white; padding: 14px 22px; border-radius: 4px;" />
+    </div>
+    <div>
+      <div style="font-size: 26px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 24px;">CNCG CALI · ABRIL 2026</div>
+      <h1 style="font-size: 130px; font-weight: 900; line-height: 1; margin: 0 0 32px 0; letter-spacing: -0.025em; max-width: 1500px;">Desplegando<br/>AI-Native Apps<br/>en Kubernetes</h1>
+      <div style="font-size: 32px; font-weight: 400; opacity: 0.92; max-width: 1400px; line-height: 1.4;">KServe, vLLM y un caso real de OCR de pasaportes.</div>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+      <div style="font-size: 24px; font-weight: 700;">
+        Jeffry Hernandez<br/>
+        <span style="font-weight: 400; opacity: 0.85;">Senior SRE · Wizeline</span>
+      </div>
+      <div style="font-size: 24px; opacity: 0.75; text-align: right; line-height: 1.5;">
+        github.com/jeffincloud<br/>
+        linkedin.com/in/jeffry-hernandez
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. Hook: 2010s vs 2025s stack -->
+<section data-label="02 Hook AI-native">
+  <div class="slide-pad">
+    <div class="section-tag">Hook</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Las apps de esta década son AI-native</h1>
+    <h2 class="slide-subtitle">El componente de inferencia ya no es un add-on. Es parte del core.</h2>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; flex: 1;">
+      <div>
+        <div style="font-size: 22px; font-weight: 700; letter-spacing: 0.2em; color: #888; text-transform: uppercase; margin-bottom: 22px;">Stack 2010s</div>
+        <div style="display:flex; flex-direction:column; gap: 14px;">
+          <div class="box fill-stone" style="font-size: 22px; padding: 22px;">Frontend</div>
+          <div style="text-align:center; font-size: 22px; color: #888;">↓</div>
+          <div class="box fill-stone" style="font-size: 22px; padding: 22px;">Backend (REST / RPC)</div>
+          <div style="text-align:center; font-size: 22px; color: #888;">↓</div>
+          <div class="box fill-stone" style="font-size: 22px; padding: 22px;">Database</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 22px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF; text-transform: uppercase; margin-bottom: 22px;">Stack 2025s</div>
+        <div style="display:flex; flex-direction:column; gap: 14px;">
+          <div class="box fill-stone" style="font-size: 22px; padding: 22px;">Frontend</div>
+          <div style="text-align:center; font-size: 22px; color: #888;">↓</div>
+          <div class="box fill-stone" style="font-size: 22px; padding: 22px;">Backend</div>
+          <div style="text-align:center; font-size: 22px; color: #0086FF;">↓</div>
+          <div class="box fill-blue" style="font-size: 26px; padding: 26px; font-weight: 900;">MODELO &nbsp;·&nbsp; inferencia</div>
+          <div style="text-align:center; font-size: 22px; color: #888;">↓</div>
+          <div class="box fill-stone" style="font-size: 22px; padding: 22px;">Database / Vector store</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>02</div></div>
+</section>
+
+<!-- 3. Agenda -->
+<section data-label="03 Agenda">
+  <div class="slide-pad">
+    <div class="section-tag">Agenda</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Cuatro cosas</h1>
+    <div style="display:flex; flex-direction:column; gap: 22px; flex: 1; justify-content: center; max-width: 1500px;">
+      <div style="display:grid; grid-template-columns: 100px 1fr; gap: 30px; align-items:center; padding: 24px 30px; background: #F6F8FA; border-left: 6px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">01</div>
+        <div style="font-size: 28px; line-height: 1.4;"><b>El problema.</b> Por qué servir AI en K8s no es trivial — y qué opciones hay.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 100px 1fr; gap: 30px; align-items:center; padding: 24px 30px; background: #F6F8FA; border-left: 6px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">02</div>
+        <div style="font-size: 28px; line-height: 1.4;"><b>KServe.</b> Qué es, cómo se modela, y las decisiones que tenés que tomar.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 100px 1fr; gap: 30px; align-items:center; padding: 24px 30px; background: #F6F8FA; border-left: 6px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">03</div>
+        <div style="font-size: 28px; line-height: 1.4;"><b>Caso real.</b> OCR de pasaportes con Qwen3-VL — implementación end-to-end.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 100px 1fr; gap: 30px; align-items:center; padding: 24px 30px; background: #F6F8FA; border-left: 6px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">04</div>
+        <div style="font-size: 28px; line-height: 1.4;"><b>Demo en vivo.</b> El sistema corriendo + kubectl atrás.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>03</div></div>
+</section>
+
+<!-- 4. Section divider: The Problem -->
+<section data-label="04 Problem divider">
+  <div class="divider">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 01 / 04</div>
+    <h1>El problema</h1>
+    <div class="divider-sub">Servir modelos de AI en Kubernetes — qué tiene de no trivial, y qué opciones existen.</div>
+  </div>
+</section>
+
+<!-- 5. Why K8s for AI -->
+<section data-label="05 Why K8s for AI">
+  <div class="slide-pad">
+    <div class="section-tag">Problema · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">¿Por qué Kubernetes para AI?</h1>
+    <h2 class="slide-subtitle">Cuatro razones reales — todas, primitives que ya conocés.</h2>
+    <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 30px; flex: 1;">
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 60px; font-weight: 900; color: #0086FF; line-height: 1;">01</div>
+        <h3 style="font-size: 30px; margin: 16px 0 12px 0;">GPU scheduling</h3>
+        <p style="font-size: 22px; line-height: 1.5; color: #444; margin: 0;">El kernel del scheduler ya gestiona recursos escasos. Una GPU es solo otro <span class="mono">resources.limits</span>.</p>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 60px; font-weight: 900; color: #0086FF; line-height: 1;">02</div>
+        <h3 style="font-size: 30px; margin: 16px 0 12px 0;">Autoscaling para cargas spiky</h3>
+        <p style="font-size: 22px; line-height: 1.5; color: #444; margin: 0;">Inferencia es ráfagas, no constante. HPA y KPA están hechos para eso.</p>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 60px; font-weight: 900; color: #0086FF; line-height: 1;">03</div>
+        <h3 style="font-size: 30px; margin: 16px 0 12px 0;">Multi-tenancy</h3>
+        <p style="font-size: 22px; line-height: 1.5; color: #444; margin: 0;">Múltiples modelos, múltiples equipos, mismo cluster. Namespaces y RBAC.</p>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 60px; font-weight: 900; color: #0086FF; line-height: 1;">04</div>
+        <h3 style="font-size: 30px; margin: 16px 0 12px 0;">Ecosystem maduro</h3>
+        <p style="font-size: 22px; line-height: 1.5; color: #444; margin: 0;">Observability, ingress, secrets, network policies. Ya están — no se reinventan para AI.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>05</div></div>
+</section>
+
+<!-- 6. What's not trivial -->
+<section data-label="06 Not trivial">
+  <div class="slide-pad">
+    <div class="section-tag">Problema · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Servir un modelo no es <span class="mono">flask + model.predict()</span></h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="background: #FFF6F2; padding: 36px; border-left: 4px solid #ED561B;">
+        <div class="tag warn" style="margin-bottom: 18px;">LO INGENUO</div>
+        <pre class="code" style="font-size: 22px; background: white;"><span class="kw">@app</span>.post(<span class="str">"/predict"</span>)
+<span class="kw">def</span> predict(img):
+    <span class="kw">return</span> model.predict(img)</pre>
+        <div style="margin-top: 26px; font-size: 22px; line-height: 1.5; color: #555;">Funciona en una laptop. <b>No</b> en producción.</div>
+      </div>
+      <div style="background: #F0F7FF; padding: 36px; border-left: 4px solid #0086FF;">
+        <div class="tag blue" style="margin-bottom: 18px;">LO QUE NECESITÁS</div>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;"><b>Batching</b> — usar la GPU eficientemente</li>
+          <li style="font-size: 22px;"><b>GPU mgmt</b> — scheduling, isolation</li>
+          <li style="font-size: 22px;"><b>Queueing</b> — cuando llegan más requests que las que el modelo procesa</li>
+          <li style="font-size: 22px;"><b>Observability</b> — métricas de inferencia</li>
+          <li style="font-size: 22px;"><b>Rollouts</b> — un modelo nuevo puede ser peor</li>
+          <li style="font-size: 22px;"><b>Versioning</b> — A/B, canary, traffic split</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>06</div></div>
+</section>
+
+<!-- 7. Options for serving -->
+<section data-label="07 Serving options">
+  <div class="slide-pad">
+    <div class="section-tag">Problema · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Las opciones para servir en K8s</h1>
+    <h2 class="slide-subtitle">Hacerlo a mano, o usar un framework que ya resolvió las primitives.</h2>
+    <div style="border: 1px solid #ddd; border-radius: 4px; overflow: hidden; margin-top: 10px;">
+      <div style="display:grid; grid-template-columns: 1.2fr 2fr 1fr; background: #0086FF; color: white; font-weight: 900; font-size: 22px;">
+        <div style="padding: 18px 26px;">Opción</div>
+        <div style="padding: 18px 26px;">Qué obtenés / qué cuesta</div>
+        <div style="padding: 18px 26px;">Cuándo</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 2fr 1fr; background: white; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 22px 26px; font-weight: 700;">DIY</div>
+        <div style="padding: 22px 26px; color: #555;">Deployment + Service + container custom. <b>Vos hacés todo</b> — batching, queueing, autoscaling, observability.</div>
+        <div style="padding: 22px 26px; color: #555;">Cuando ya tenés todo armado.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 2fr 1fr; background: #F0F7FF; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 22px 26px; font-weight: 900; color: #0086FF;">KServe &nbsp;<span class="tag blue" style="font-size: 12px;">CNCF</span></div>
+        <div style="padding: 22px 26px;">Declarativo, multi-runtime, integrado con K8s nativo. <b>InferenceService</b> = un CRD.</div>
+        <div style="padding: 22px 26px;">Cloud-native, generalista.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 2fr 1fr; background: #FAFBFC; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 22px 26px; font-weight: 700;">Seldon Core</div>
+        <div style="padding: 22px 26px; color: #555;">Pipelines complejos, A/B testing, MLOps-pesado.</div>
+        <div style="padding: 22px 26px; color: #555;">Pipelines, no solo serving.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 2fr 1fr; background: white; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 22px 26px; font-weight: 700;">BentoML</div>
+        <div style="padding: 22px 26px; color: #555;">Python-first, packaging de modelos. Menos K8s-nativo.</div>
+        <div style="padding: 22px 26px; color: #555;">DS-driven teams.</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 2fr 1fr; background: #FAFBFC; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 22px 26px; font-weight: 700;">Ray Serve</div>
+        <div style="padding: 22px 26px; color: #555;">Distribuido, modelos compuestos.</div>
+        <div style="padding: 22px 26px; color: #555;">Workloads grandes / distribuidos.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>07</div></div>
+</section>
+
+<!-- 8. Transition -->
+<section data-label="08 Transition KServe">
+  <div style="position:absolute; inset:0; background: #0086FF; color: white; display:flex; flex-direction:column; justify-content:center; padding: 0 110px;">
+    <div style="font-size: 26px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 32px;">TRANSICIÓN</div>
+    <h1 style="font-size: 130px; font-weight: 900; line-height: 1; margin: 0 0 40px 0; letter-spacing: -0.02em; max-width: 1700px;">KServe es la solución<br/>de facto.</h1>
+    <div style="font-size: 32px; opacity: 0.92; max-width: 1500px; line-height: 1.45;">Veamos por qué — y qué decisiones tenés que tomar cuando lo adoptás.</div>
+  </div>
+</section>
+
+<!-- 9. KServe section divider -->
+<section data-label="09 KServe divider">
+  <div class="divider" style="background: #058DC7;">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 02 / 04</div>
+    <h1>KServe</h1>
+    <div class="divider-sub">El framework de serving cloud-native — qué es, cómo se modela, y dónde termina.</div>
+  </div>
+</section>
+
+<!-- 10. What is KServe -->
+<section data-label="10 What is KServe">
+  <div class="slide-pad">
+    <div class="section-tag">KServe · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">¿Qué es KServe?</h1>
+    <div style="display:grid; grid-template-columns: 1.1fr 1fr; gap: 60px; flex: 1;">
+      <div>
+        <ul class="bullet-list">
+          <li><b>Proyecto CNCF</b> en estado <i>incubating</i>.</li>
+          <li><b>Declarativo</b> sobre Kubernetes — describís el modelo, KServe arma el plumbing.</li>
+          <li>Abstrae <b>model serving</b> detrás de un CRD: <span class="mono">InferenceService</span>.</li>
+          <li>Multi-runtime: vLLM, Triton, HuggingFace, sklearn, custom.</li>
+        </ul>
+      </div>
+      <div style="background: #0086FF; color: white; padding: 50px 44px; align-self: center;">
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; opacity: 0.85; margin-bottom: 18px;">FRASE CLAVE</div>
+        <div style="font-size: 38px; font-weight: 900; line-height: 1.3;">
+          Vos declarás el <i>qué</i>.<br/>
+          KServe arma el <i>cómo</i>.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>10</div></div>
+</section>
+
+<!-- 11. KServe components -->
+<section data-label="11 KServe components">
+  <div class="slide-pad">
+    <div class="section-tag">KServe · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;">El modelo mental — 5 componentes</h1>
+
+    <div style="flex:1; display:flex; flex-direction:column; gap: 22px; justify-content:center;">
+      <div style="display:flex; justify-content:center;">
+        <div style="background: #0086FF; color: white; padding: 22px 50px; font-size: 26px; font-weight: 900; min-width: 600px; text-align: center;">
+          InferenceService
+          <div style="font-size: 18px; font-weight: 400; opacity: 0.9; margin-top: 4px;">CR de alto nivel — <i>"quiero servir este modelo"</i></div>
+        </div>
+      </div>
+      <div style="text-align: center; font-size: 28px; color: #0086FF;">↓</div>
+      <div style="display:flex; justify-content:center;">
+        <div style="border: 2px solid #0086FF; padding: 18px 40px; font-size: 24px; font-weight: 700; min-width: 500px; text-align: center;">
+          ServingRuntime
+          <div style="font-size: 18px; font-weight: 400; color: #555; margin-top: 4px;">cómo se sirve — container + args + env</div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 1500px; margin: 0 auto; width: 100%;">
+        <div style="border: 2px solid #0086FF; background: #F6F8FA; padding: 22px 24px; text-align: center;">
+          <div style="font-size: 22px; font-weight: 900;">Predictor</div>
+          <div style="font-size: 18px; color: #555; margin-top: 6px;">el motor (vLLM, Triton, etc.)</div>
+        </div>
+        <div style="border: 2px dashed #888; padding: 22px 24px; text-align: center;">
+          <div style="font-size: 22px; font-weight: 900; color: #555;">Transformer <span style="font-size: 14px;">(opcional)</span></div>
+          <div style="font-size: 18px; color: #555; margin-top: 6px;">pre / post-procesado</div>
+        </div>
+        <div style="border: 2px dashed #888; padding: 22px 24px; text-align: center;">
+          <div style="font-size: 22px; font-weight: 900; color: #555;">Explainer <span style="font-size: 14px;">(opcional)</span></div>
+          <div style="font-size: 18px; color: #555; margin-top: 6px;">explicabilidad</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align: center; font-size: 22px; color: #555; margin-top: 24px;">
+      Mayoría de casos: <b>InferenceService + ServingRuntime + Predictor</b>.
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>11</div></div>
+</section>
+
+<!-- 12. Built-in runtimes -->
+<section data-label="12 Built-in runtimes">
+  <div class="slide-pad">
+    <div class="section-tag">KServe · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Runtimes built-in &nbsp;·&nbsp; y custom</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="background: #F0F7FF; padding: 40px; border-left: 4px solid #0086FF;">
+        <div class="tag blue" style="margin-bottom: 22px;">BUILT-IN</div>
+        <h3 style="font-size: 28px; margin: 0 0 18px 0;">Si tu modelo encaja, es 1 manifest.</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="box" style="padding: 18px; font-size: 22px;">sklearn</div>
+          <div class="box" style="padding: 18px; font-size: 22px;">xgboost</div>
+          <div class="box" style="padding: 18px; font-size: 22px;">pytorch</div>
+          <div class="box" style="padding: 18px; font-size: 22px;">tensorflow</div>
+          <div class="box" style="padding: 18px; font-size: 22px; grid-column: 1 / -1;">huggingface</div>
+        </div>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px; border-left: 4px solid #058DC7;">
+        <div class="tag muted" style="margin-bottom: 22px;">CUSTOM</div>
+        <h3 style="font-size: 28px; margin: 0 0 18px 0;">¿No encaja? Definís un <span class="mono">ServingRuntime</span>.</h3>
+        <pre class="code" style="font-size: 18px; background: white;"><span class="kw">apiVersion</span>: serving.kserve.io/v1alpha1
+<span class="kw">kind</span>: ServingRuntime
+<span class="kw">spec</span>:
+  <span class="kw">containers</span>:
+  - <span class="kw">name</span>: kserve-container
+    <span class="kw">image</span>: vllm/vllm-openai:v0.11.0
+    <span class="kw">args</span>: [<span class="str">--model</span>, <span class="str">Qwen/Qwen3-VL-4B</span>]</pre>
+        <div style="margin-top: 22px; font-size: 22px; color: #555; line-height: 1.4;">Cualquier container que exponga HTTP / gRPC.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>12</div></div>
+</section>
+
+<!-- 13. RawDeployment vs Serverless -->
+<section data-label="13 Raw vs Knative">
+  <div class="slide-pad">
+    <div class="section-tag">KServe · 04</div>
+    <h1 class="slide-title" style="margin-top: 30px;">RawDeployment vs. Serverless (Knative)</h1>
+    <h2 class="slide-subtitle">Decisión de instalación que cambia toda la operación.</h2>
+    <div style="border: 1px solid #ddd; overflow: hidden; margin-top: 10px;">
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; background: #0086FF; color: white; font-weight: 900; font-size: 22px;">
+        <div style="padding: 18px 26px;">Aspecto</div>
+        <div style="padding: 18px 26px;">RawDeployment</div>
+        <div style="padding: 18px 26px;">Serverless (Knative)</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; background: white; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 18px 26px; font-weight: 700;">Scale-to-zero</div>
+        <div style="padding: 18px 26px; color: #ED561B;">No</div>
+        <div style="padding: 18px 26px; color: #50B432;">Sí</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; background: #F6F8FA; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 18px 26px; font-weight: 700;">Cold starts</div>
+        <div style="padding: 18px 26px; color: #50B432;">No</div>
+        <div style="padding: 18px 26px; color: #ED561B;">Sí — visibles</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; background: white; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 18px 26px; font-weight: 700;">Operadores extra</div>
+        <div style="padding: 18px 26px;">cert-manager</div>
+        <div style="padding: 18px 26px;">+ Knative Serving + Istio/Kourier</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; background: #F6F8FA; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 18px 26px; font-weight: 700;">Autoscaler</div>
+        <div style="padding: 18px 26px;">HPA</div>
+        <div style="padding: 18px 26px;">KPA</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 1.2fr 1fr 1fr; background: white; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 18px 26px; font-weight: 700;">Cuándo</div>
+        <div style="padding: 18px 26px;">1 modelo, GPU dedicada</div>
+        <div style="padding: 18px 26px;">Muchos modelos, tráfico bursty</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>13</div></div>
+</section>
+
+<!-- 14. InferenceService YAML -->
+<section data-label="14 IS YAML">
+  <div class="slide-pad">
+    <div class="section-tag">KServe · 05</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Cómo se ve en YAML</h1>
+    <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap: 50px; flex: 1;">
+      <pre class="code" style="font-size: 20px;"><span class="kw">apiVersion</span>: serving.kserve.io/v1beta1
+<span class="kw">kind</span>: InferenceService
+<span class="kw">metadata</span>:
+  <span class="kw">name</span>: qwen3-vl
+<span class="kw">spec</span>:
+  <span class="kw">predictor</span>:
+    <span class="kw">model</span>:
+      <span class="kw">modelFormat</span>:
+        <span class="kw">name</span>: vllm
+      <span class="kw">runtime</span>: vllm-runtime
+      <span class="kw">resources</span>:
+        <span class="kw">limits</span>:
+          nvidia.com/gpu: <span class="num">1</span></pre>
+      <div style="display: flex; flex-direction: column; justify-content: center; gap: 24px;">
+        <div style="font-size: 22px; line-height: 1.5; color: #333;">
+          <b>~10 líneas.</b><br/><br/>
+          KServe debajo crea:
+        </div>
+        <ul class="bullet-list" style="gap: 12px;">
+          <li style="font-size: 22px;">Deployment</li>
+          <li style="font-size: 22px;">Service</li>
+          <li style="font-size: 22px;">HPA</li>
+          <li style="font-size: 22px;">Ingress / VirtualService</li>
+        </ul>
+        <div style="background: #F6F8FA; padding: 18px 22px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.4;">
+          Esto es la abstracción.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>14</div></div>
+</section>
+
+<!-- 15. What K8s gives, what it doesn't -->
+<section data-label="15 K8s frontier">
+  <div class="slide-pad">
+    <div class="section-tag">KServe · 06</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Lo que K8s te resuelve &nbsp;·&nbsp; lo que <i>no</i></h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="background: #F0FBEF; padding: 40px; border-left: 4px solid #50B432;">
+        <div style="display:inline-block; background: #50B432; color: white; padding: 6px 14px; font-size: 16px; font-weight: 900; letter-spacing: 0.15em; margin-bottom: 22px;">K8S RESUELVE</div>
+        <ul class="bullet-list" style="gap: 16px;">
+          <li style="font-size: 24px;"><b>Scheduling</b></li>
+          <li style="font-size: 24px;"><b>Replicación</b></li>
+          <li style="font-size: 24px;"><b>Ingress</b></li>
+          <li style="font-size: 24px;"><b>Secrets</b></li>
+          <li style="font-size: 24px;"><b>Network policies</b></li>
+        </ul>
+      </div>
+      <div style="background: #FFF6F2; padding: 40px; border-left: 4px solid #ED561B;">
+        <div style="display:inline-block; background: #ED561B; color: white; padding: 6px 14px; font-size: 16px; font-weight: 900; letter-spacing: 0.15em; margin-bottom: 22px;">SIGUE SIENDO TUYO</div>
+        <ul class="bullet-list" style="gap: 16px;">
+          <li style="font-size: 24px;"><b>Drivers de GPU</b> del host</li>
+          <li style="font-size: 24px;"><b>Configuración del runtime</b></li>
+          <li style="font-size: 24px;"><b>Image tags</b> y versiones</li>
+          <li style="font-size: 24px;"><b>Kernel</b> del nodo</li>
+        </ul>
+      </div>
+    </div>
+    <div style="text-align: center; font-size: 26px; font-weight: 900; color: #0086FF; margin-top: 36px;">
+      Conocer la frontera = saber qué decisiones tenés que tomar vos.
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>15</div></div>
+</section>
+
+<!-- 16. Adoption -->
+<section data-label="16 Adoption">
+  <div class="slide-pad">
+    <div class="section-tag">KServe · 07</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Adopción y ecosistema</h1>
+    <h2 class="slide-subtitle">No es una isla — encaja con lo que ya tenés en cloud-native.</h2>
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 30px; flex: 1;">
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF;">
+        <h3 style="font-size: 28px; margin: 0 0 16px 0;">Service mesh</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Integración nativa con <b>Istio</b> — mTLS, traffic split, observability.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF;">
+        <h3 style="font-size: 28px; margin: 0 0 16px 0;">GitOps</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;"><span class="mono">InferenceService</span> es un CR — <b>ArgoCD</b> y <b>Flux</b> lo manejan como cualquier recurso.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 36px; border-top: 6px solid #0086FF;">
+        <h3 style="font-size: 28px; margin: 0 0 16px 0;">Serverless</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Modo Serverless usa <b>Knative</b> debajo — scale-to-zero real.</div>
+      </div>
+    </div>
+    <div style="background: #F6F8FA; padding: 26px 32px; margin-top: 30px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5;">
+      Producción a escala en organizaciones que sirven LLMs, modelos de visión, y pipelines de ML clásico — todo en el mismo cluster.
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>16</div></div>
+</section>
+
+<!-- 17. Transition to case -->
+<section data-label="17 Transition Case">
+  <div style="position:absolute; inset:0; background: #0086FF; color: white; display:flex; flex-direction:column; justify-content:center; padding: 0 110px;">
+    <div style="font-size: 26px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 32px;">TRANSICIÓN</div>
+    <h1 style="font-size: 130px; font-weight: 900; line-height: 1; margin: 0 0 40px 0; letter-spacing: -0.02em; max-width: 1700px;">Veamos cómo lo apliqué<br/>a un caso real.</h1>
+    <div style="font-size: 32px; opacity: 0.92; max-width: 1500px; line-height: 1.45;">OCR de pasaportes con Qwen3-VL — end-to-end.</div>
+  </div>
+</section>
+
+<!-- 18. Case divider -->
+<section data-label="18 Case divider">
+  <div class="divider">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 03 / 04</div>
+    <h1>El caso real</h1>
+    <div class="divider-sub">OCR de pasaportes con Qwen3-VL — qué construí, por qué, y cuál es el pipeline.</div>
+  </div>
+</section>
+
+<!-- 19. What I built -->
+<section data-label="19 What I built">
+  <div class="slide-pad">
+    <div class="section-tag">Caso · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">¿Qué construí?</h1>
+    <h2 class="slide-subtitle">App que extrae datos estructurados de fotos de pasaportes.</h2>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="background: #F6F8FA; border: 2px dashed #0086FF; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px;">
+        <div style="font-size: 22px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF;">PLACEHOLDER</div>
+        <div style="font-size: 20px; color: #555; max-width: 360px; text-align: center; line-height: 1.45;">
+          Screenshot del frontend con un pasaporte cargado y el JSON visible.
+        </div>
+        <div class="mono" style="font-size: 16px; color: #888; margin-top: 10px;">visuals/02-frontend-result.png</div>
+      </div>
+      <div style="display:flex; flex-direction:column; justify-content:center; gap: 28px;">
+        <div>
+          <div class="tag blue" style="margin-bottom: 14px;">INPUT</div>
+          <div style="font-size: 26px;">Imagen <span class="mono">.jpg</span> / <span class="mono">.png</span> de un pasaporte.</div>
+        </div>
+        <div>
+          <div class="tag ok" style="margin-bottom: 14px;">OUTPUT</div>
+          <pre class="code" style="font-size: 18px;">{
+  <span class="key">"surname"</span>: <span class="str">"HERNANDEZ"</span>,
+  <span class="key">"given_names"</span>: <span class="str">"JEFFRY"</span>,
+  <span class="key">"passport_number"</span>: <span class="str">"AB1234567"</span>,
+  <span class="key">"date_of_birth"</span>: <span class="str">"1990-03-15"</span>,
+  <span class="key">"date_of_expiry"</span>: <span class="str">"2030-01-01"</span>,
+  <span class="key">"mrz"</span>: { ... }
+}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>19</div></div>
+</section>
+
+<!-- 20. Why OCR -->
+<section data-label="20 Why OCR">
+  <div class="slide-pad">
+    <div class="section-tag">Caso · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;">¿Por qué OCR?</h1>
+    <h2 class="slide-subtitle">Caso de uso real — y un buen ejercicio para mostrar multimodal en KServe.</h2>
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 30px; flex: 1;">
+      <div style="background: #F6F8FA; padding: 40px; border-top: 6px solid #0086FF;">
+        <h3 style="font-size: 28px; margin: 0 0 16px 0;">Onboarding KYC</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Verificación de identidad — banca, fintech, crypto.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px; border-top: 6px solid #0086FF;">
+        <h3 style="font-size: 28px; margin: 0 0 16px 0;">Control de fronteras</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Lectura automática en aduanas y check-in.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px; border-top: 6px solid #0086FF;">
+        <h3 style="font-size: 28px; margin: 0 0 16px 0;">Viajes corporativos</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Captura de datos de pasaporte en plataformas de booking.</div>
+      </div>
+    </div>
+    <div style="background: #F0F7FF; padding: 26px 32px; margin-top: 36px; border-left: 4px solid #0086FF; font-size: 24px; line-height: 1.5;">
+      <b>Multimodal real</b> — no es chat. Necesita un <b>VLM</b> (Vision-Language Model), no un LLM puro.
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>20</div></div>
+</section>
+
+<!-- 21. Why Qwen3-VL -->
+<section data-label="21 Why Qwen3-VL">
+  <div class="slide-pad">
+    <div class="section-tag">Caso · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">¿Por qué Qwen3-VL-4B?</h1>
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 30px; flex: 1;">
+      <div style="background:#F6F8FA; padding: 36px; border-top: 4px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">A2.0</div>
+        <h3 style="font-size: 24px; font-weight: 900; margin: 14px 0 10px 0;">Open weights</h3>
+        <div style="font-size: 20px; color: #555; line-height: 1.5;">Apache 2.0. Self-hosting sin restricciones.</div>
+      </div>
+      <div style="background:#F6F8FA; padding: 36px; border-top: 4px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">8GB</div>
+        <h3 style="font-size: 24px; font-weight: 900; margin: 14px 0 10px 0;">Entra en VRAM</h3>
+        <div style="font-size: 20px; color: #555; line-height: 1.5;">FP16 → ~8GB. Cómodo en RTX 4090 (24GB).</div>
+      </div>
+      <div style="background:#F6F8FA; padding: 36px; border-top: 4px solid #0086FF;">
+        <div style="font-size: 56px; font-weight: 900; color: #0086FF; line-height: 1;">VL</div>
+        <h3 style="font-size: 24px; font-weight: 900; margin: 14px 0 10px 0;">Imágenes + JSON</h3>
+        <div style="font-size: 20px; color: #555; line-height: 1.5;">Estructurado out-of-the-box.</div>
+      </div>
+    </div>
+    <div style="background: #FFF6F2; padding: 26px 32px; margin-top: 36px; border-left: 4px solid #ED561B; font-size: 22px; line-height: 1.5;">
+      Alternativas (<b>GPT-4V</b>, <b>Gemini</b>) son APIs cerradas — no self-hosted, no aplican para mostrar KServe.
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>21</div></div>
+</section>
+
+<!-- 22. Pipeline end-to-end -->
+<section data-label="22 Pipeline">
+  <div class="slide-pad">
+    <div class="section-tag">Caso · 04</div>
+    <h1 class="slide-title" style="margin-top: 30px;">El pipeline end-to-end</h1>
+    <div style="flex:1; display:flex; flex-direction: column; justify-content: center; gap: 30px;">
+      <div style="display: grid; grid-template-columns: repeat(11, 1fr); gap: 8px; align-items: center;">
+        <div class="box fill-stone" style="font-size: 18px; padding: 20px 10px; grid-column: span 2;">imagen</div>
+        <div style="text-align:center; font-size: 22px; color: #0086FF;">→</div>
+        <div class="box" style="font-size: 18px; padding: 20px 10px; grid-column: span 1;">resize</div>
+        <div style="text-align:center; font-size: 22px; color: #0086FF;">→</div>
+        <div class="box fill-blue" style="font-size: 18px; padding: 20px 10px; grid-column: span 2;">vLLM<br/>(Qwen3-VL)</div>
+        <div style="text-align:center; font-size: 22px; color: #0086FF;">→</div>
+        <div class="box" style="font-size: 18px; padding: 20px 10px; grid-column: span 1;">JSON parse</div>
+        <div style="text-align:center; font-size: 22px; color: #50B432;">→</div>
+        <div class="box" style="font-size: 18px; padding: 20px 10px; grid-column: span 1; background: #F0FBEF; border-color: #50B432; color: #2E7D2E; font-weight: 700;">MRZ<br/>validate</div>
+      </div>
+      <div style="text-align: right; font-size: 22px; color: #0086FF;">↓</div>
+      <div style="display: flex; justify-content: flex-end;">
+        <div class="box" style="font-size: 22px; padding: 20px 30px; background: #F0FBEF; border-color: #50B432; color: #2E7D2E; font-weight: 700;">JSON validado</div>
+      </div>
+    </div>
+    <div style="background: #F0FBEF; padding: 26px 32px; margin-top: 30px; border-left: 4px solid #50B432; font-size: 22px; line-height: 1.5;">
+      Si la <b>MRZ valida</b> con sus check digits, sus campos <b>overridean</b> al modelo. Determinístico encima de probabilístico.
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>22</div></div>
+</section>
+
+<!-- 23. Implementation divider -->
+<section data-label="23 Impl divider">
+  <div class="divider" style="background: #058DC7;">
+    <div class="divider-corner"></div>
+    <div class="section-num">PARTE 03b / 04</div>
+    <h1>Implementación</h1>
+    <div class="divider-sub">Arquitectura, stack, y decisiones de ingeniería que tomé para que KServe + vLLM + Qwen3-VL funcionen juntos.</div>
+  </div>
+</section>
+
+<!-- 24. Architecture -->
+<section data-label="24 Architecture">
+  <div class="slide-pad">
+    <div class="section-tag">Implementación · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Arquitectura — 3 microservicios en K3s</h1>
+    <div style="background: #F6F8FA; border: 2px dashed #0086FF; flex: 1; display:flex; flex-direction:column; align-items: center; justify-content: center; gap: 30px; padding: 50px;">
+      <!-- inline diagram so the slide is not empty -->
+      <div style="display:grid; grid-template-columns: repeat(11, auto); align-items:center; gap: 6px; font-size: 19px;">
+        <div class="box fill-stone" style="padding: 16px 14px;">Browser</div>
+        <div style="color:#0086FF;">→</div>
+        <div class="box" style="padding: 16px 14px;">Traefik<br/>Ingress</div>
+        <div style="color:#0086FF;">→</div>
+        <div class="box" style="padding: 16px 14px;">Frontend<br/>(nginx)</div>
+        <div style="color:#0086FF;">→</div>
+        <div class="box" style="padding: 16px 14px;">API<br/>(FastAPI)</div>
+        <div style="color:#0086FF;">→</div>
+        <div class="box fill-blue" style="padding: 16px 14px;">InferenceService<br/>(KServe)</div>
+        <div style="color:#0086FF;">→</div>
+        <div class="box fill-blue" style="padding: 16px 14px;">vLLM pod<br/>(Qwen3-VL)</div>
+      </div>
+      <div style="font-size: 18px; color: #888; margin-top: 14px;"><span class="mono">visuals/04-architecture.mmd</span> &nbsp;·&nbsp; reemplazar con Mermaid renderizado</div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>24</div></div>
+</section>
+
+<!-- 25. The stack -->
+<section data-label="25 The stack">
+  <div class="slide-pad">
+    <div class="section-tag">Implementación · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;">El stack</h1>
+    <div style="flex:1; display:flex; flex-direction:column; gap: 18px; justify-content:center; max-width: 1500px; margin: 20px auto 0;">
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Charts</div>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+          <div class="box fill-blue">model</div>
+          <div class="box fill-blue">api</div>
+          <div class="box fill-blue">frontend</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Inference</div>
+        <div class="box blue" style="font-size: 22px;">vLLM &nbsp;·&nbsp; Qwen3-VL-4B-Instruct</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Serving</div>
+        <div class="box blue" style="font-size: 22px;">KServe v0.14 &nbsp;·&nbsp; RawDeployment</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Platform</div>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+          <div class="box">cert-manager</div>
+          <div class="box">NVIDIA Device Plugin</div>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns: 220px 1fr; gap: 24px; align-items:center;">
+        <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #888; text-transform: uppercase; text-align: right;">Kubernetes</div>
+        <div class="box fill-stone" style="font-size: 22px;">K3s v1.34 · single node</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>25</div></div>
+</section>
+
+<!-- 26. Why K3s -->
+<section data-label="26 Why K3s">
+  <div class="slide-pad">
+    <div class="section-tag">Implementación · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">¿Por qué K3s?</h1>
+    <div style="display:grid; grid-template-columns: 1.1fr 1fr; gap: 60px; flex:1;">
+      <div>
+        <ul class="bullet-list">
+          <li><b>1 nodo</b>, <b>1 binario</b>, <b>~50 MB</b>.</li>
+          <li>Install en 60 segundos.</li>
+          <li>Trae <b>Traefik</b>, ServiceLB y local-path-provisioner.</li>
+          <li>Soporta los CRDs que <b>KServe v0.14</b> requiere.</li>
+          <li>Suficiente para serving single-node.</li>
+        </ul>
+      </div>
+      <div style="align-self: center;">
+        <pre class="code"><span class="com"># un comando</span>
+$ curl -sfL https://get.k3s.io | sh -
+
+$ kubectl get nodes
+NAME       STATUS   VERSION
+gpu-node   <span class="ok">Ready</span>    v1.34.1+k3s1</pre>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>26</div></div>
+</section>
+
+<!-- 27. Why RawDeployment -->
+<section data-label="27 Why Raw">
+  <div class="slide-pad">
+    <div class="section-tag">Implementación · 04</div>
+    <h1 class="slide-title" style="margin-top: 30px;">¿Por qué RawDeployment?</h1>
+    <h2 class="slide-subtitle">Con 1 GPU, scale-to-zero no aporta valor — y agrega cosas que pueden fallar.</h2>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="border: 2px solid #0086FF; padding: 36px;">
+        <div class="tag blue" style="margin-bottom: 18px;">RAWDEPLOYMENT &nbsp;·&nbsp; ELEGIDO</div>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;">1 GPU dedicada → no hay nada a qué escalar a cero</li>
+          <li style="font-size: 22px;">El modelo tarda <b>~1 min</b> en cargar → cold start dolería</li>
+          <li style="font-size: 22px;">Menos componentes = menos cosas que fallan</li>
+        </ul>
+      </div>
+      <div style="border: 2px solid #E5E5E5; padding: 36px; opacity: 0.85;">
+        <div class="tag muted" style="margin-bottom: 18px;">KNATIVE &nbsp;·&nbsp; DESCARTADO</div>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;">Activator + Autoscaler + Istio extras</li>
+          <li style="font-size: 22px;">Cold starts visibles para el usuario</li>
+          <li style="font-size: 22px;">Vale la pena cuando hay muchos modelos, tráfico bursty</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>27</div></div>
+</section>
+
+<!-- 28. Tradeoff: built-in HF runtime too old -->
+<section data-label="28 Tradeoff HF runtime">
+  <div class="slide-pad">
+    <div class="section-tag">Decisión · 01</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Runtime built-in de HuggingFace — demasiado viejo</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag muted" style="margin-bottom: 14px;">CONTEXTO</div>
+        <div style="font-size: 22px; line-height: 1.5; margin-bottom: 24px;">KServe v0.14 trae un <span class="mono">huggingfaceserver</span> con vLLM bundled — pero la versión que trae <b>no reconoce <span class="mono">qwen3_vl</span></b>.</div>
+        <div class="tag warn" style="margin-bottom: 14px;">CONSTRAINT</div>
+        <div style="font-size: 22px; line-height: 1.5;">Necesito Qwen3-VL → necesito vLLM ≥ 0.10.x.</div>
+      </div>
+      <div>
+        <div class="tag ok" style="margin-bottom: 14px;">DECISIÓN</div>
+        <div style="font-size: 22px; line-height: 1.5; margin-bottom: 18px;"><span class="mono">ServingRuntime</span> custom apuntando a <span class="mono">vllm/vllm-openai</span>.</div>
+        <pre class="code" style="font-size: 19px;"><span class="kw">apiVersion</span>: serving.kserve.io/v1alpha1
+<span class="kw">kind</span>: ServingRuntime
+<span class="kw">metadata</span>:
+  <span class="kw">name</span>: vllm-runtime
+<span class="kw">spec</span>:
+  <span class="kw">supportedModelFormats</span>:
+    - <span class="kw">name</span>: vllm
+  <span class="kw">containers</span>:
+  - <span class="kw">name</span>: kserve-container
+    <span class="kw">image</span>: vllm/vllm-openai:v0.11.0</pre>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>28</div></div>
+</section>
+
+<!-- 29. Tradeoff: hf:// not a valid URI -->
+<section data-label="29 Tradeoff hf URI">
+  <div class="slide-pad">
+    <div class="section-tag">Decisión · 02</div>
+    <h1 class="slide-title" style="margin-top: 30px;"><span class="mono">hf://</span> no es URI válido en KServe v0.14</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag muted" style="margin-bottom: 14px;">CONTEXTO</div>
+        <div style="font-size: 22px; line-height: 1.5; margin-bottom: 22px;">Quiero apuntar al modelo en HuggingFace Hub:<br/><span class="mono">hf://Qwen/Qwen3-VL-4B-Instruct</span>.</div>
+        <div class="tag warn" style="margin-bottom: 14px;">ERROR</div>
+        <pre class="code" style="font-size: 18px;"><span class="err">Invalid value: "hf://...":</span>
+storageUri must be one of:
+  gs:// | s3:// | pvc:// |
+  file:// | https://</pre>
+      </div>
+      <div>
+        <div class="tag ok" style="margin-bottom: 14px;">DECISIÓN</div>
+        <div style="font-size: 22px; line-height: 1.5; margin-bottom: 18px;">Hardcodear el HF model id en <span class="mono">--model</span> y dejar que vLLM lo descargue al startup.</div>
+        <pre class="code" style="font-size: 19px;"><span class="kw">args</span>:
+  - <span class="str">--model=Qwen/Qwen3-VL-4B-Instruct</span>
+  - <span class="str">--dtype=float16</span>
+  - <span class="str">--max-model-len=8192</span></pre>
+        <div style="font-size: 22px; line-height: 1.5; color: #555; margin-top: 22px;">Costo: descarga al primer arranque del pod.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>29</div></div>
+</section>
+
+<!-- 30. Tradeoff: vLLM image pin -->
+<section data-label="30 Tradeoff vLLM pin">
+  <div class="slide-pad">
+    <div class="section-tag">Decisión · 03</div>
+    <h1 class="slide-title" style="margin-top: 30px;">vLLM image pin: <span class="mono">v0.11.0</span></h1>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag muted" style="margin-bottom: 14px;">CONTEXTO</div>
+        <div style="font-size: 22px; line-height: 1.5;">Hay dos restricciones simultáneas: el modelo y el driver del host.</div>
+
+        <div style="margin-top: 30px; background: #F6F8FA; padding: 24px 28px; border-left: 4px solid #0086FF;">
+          <div style="font-size: 20px; font-weight: 700; letter-spacing: 0.15em; color: #888; margin-bottom: 16px;">VENTANA VÁLIDA</div>
+          <!-- timeline -->
+          <div style="display:grid; grid-template-columns: repeat(5, 1fr); gap: 4px; font-size: 18px;">
+            <div style="padding: 14px 8px; background: #FFF6F2; color: #ED561B; text-align:center; border: 1px solid #ED561B;">v0.10.x<br/><span style="font-size: 14px;">no qwen3_vl</span></div>
+            <div style="padding: 14px 8px; background: #F0FBEF; color: #2E7D2E; text-align:center; border: 2px solid #50B432; font-weight: 700;">v0.11.0 ✓<br/><span style="font-size: 14px; font-weight: 400;">CUDA 12.x</span></div>
+            <div style="padding: 14px 8px; background: #F0FBEF; color: #2E7D2E; text-align:center; border: 1px solid #50B432;">v0.11.1<br/><span style="font-size: 14px;">CUDA 12.x</span></div>
+            <div style="padding: 14px 8px; background: #FFF6F2; color: #ED561B; text-align:center; border: 1px solid #ED561B;">v0.11.2<br/><span style="font-size: 14px;">CUDA 13</span></div>
+            <div style="padding: 14px 8px; background: #FFF6F2; color: #ED561B; text-align:center; border: 1px solid #ED561B;">v0.12+<br/><span style="font-size: 14px;">CUDA 13</span></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="tag warn" style="margin-bottom: 14px;">CONSTRAINT</div>
+        <ul class="bullet-list" style="gap: 12px;">
+          <li style="font-size: 22px;"><b>v0.10.x</b> no soporta qwen3_vl</li>
+          <li style="font-size: 22px;"><b>v0.11.2+</b> usa CUDA 13</li>
+          <li style="font-size: 22px;">Host driver = <b>CUDA 12.8</b></li>
+        </ul>
+        <div class="tag ok" style="margin: 30px 0 14px 0;">DECISIÓN</div>
+        <pre class="code" style="font-size: 19px;"><span class="kw">image</span>: vllm/vllm-openai:<span class="ok">v0.11.0</span>
+<span class="com"># nunca :latest</span></pre>
+        <div style="font-size: 22px; line-height: 1.5; color: #555; margin-top: 24px;">KServe no sabe qué CUDA tiene tu driver. Esta decisión es tuya.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>30</div></div>
+</section>
+
+<!-- 31. Tradeoff: rolling update with 1 GPU -->
+<section data-label="31 Tradeoff Recreate">
+  <div class="slide-pad">
+    <div class="section-tag">Decisión · 04</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Rollout strategy: <span class="mono">Recreate</span></h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div class="tag muted" style="margin-bottom: 14px;">CONTEXTO</div>
+        <div style="font-size: 22px; line-height: 1.5; margin-bottom: 22px;">Con <b>1 GPU schedulable</b>, RollingUpdate genera deadlock:</div>
+        <pre class="code" style="font-size: 19px;">$ kubectl get pods
+vllm-old-xxx    <span class="ok">Running</span>   2d
+vllm-new-yyy    <span class="err">Pending</span>   ∞
+<span class="com"># Insufficient nvidia.com/gpu</span></pre>
+        <div style="margin-top: 22px; font-size: 22px; line-height: 1.5;"><b>Pod nuevo</b> espera la GPU. <b>Pod viejo</b> no la libera hasta que el nuevo esté Ready. Deadlock.</div>
+      </div>
+      <div>
+        <div class="tag ok" style="margin-bottom: 14px;">DECISIÓN</div>
+        <pre class="code" style="font-size: 19px;">$ kubectl patch deploy/vllm-predictor \
+   -p <span class="str">'{"spec":{"strategy":{
+       "type":"Recreate"}}}'</span></pre>
+        <div style="background: #F6F8FA; padding: 22px 26px; margin-top: 26px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5;">
+          Cuando un recurso es <b>scarce</b> (GPU, IP estática, port host) → <span class="mono">Recreate</span>. ~30s downtime, pero el rollout completa.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>31</div></div>
+</section>
+
+<!-- 32. Tradeoff: GPU availability -->
+<section data-label="32 Tradeoff GPU avail">
+  <div class="slide-pad">
+    <div class="section-tag">Decisión · 05</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Encontrar GPU disponible</h1>
+    <h2 class="slide-subtitle">El quota de GPU es una constraint real de infra — afecta el diseño antes de empezar.</h2>
+
+    <div style="border: 1px solid #ddd; overflow: hidden; margin-top: 4px;">
+      <div style="display:grid; grid-template-columns: 280px 1fr 60px; background: #F6F8FA; font-weight: 900; font-size: 20px; color: #888; text-transform: uppercase; letter-spacing: 0.1em;">
+        <div style="padding: 14px 28px;">Cloud probado</div>
+        <div style="padding: 14px 28px;">Resultado</div>
+        <div style="padding: 14px 28px;"></div>
+      </div>
+      <div style="display:grid; grid-template-columns: 280px 1fr 60px; background: white; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 16px 28px; font-weight: 700;">GCP</div>
+        <div style="padding: 16px 28px; color: #555;">"not eligible based on service usage history"</div>
+        <div style="padding: 16px 28px; color: #ED561B; font-size: 24px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 280px 1fr 60px; background: #FAFBFC; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 16px 28px; font-weight: 700;">Vultr (VKE / Cloud GPU)</div>
+        <div style="padding: 16px 28px; color: #555;">account-gated · A40 partition gated</div>
+        <div style="padding: 16px 28px; color: #ED561B; font-size: 24px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 280px 1fr 60px; background: white; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 16px 28px; font-weight: 700;">Lambda Labs</div>
+        <div style="padding: 16px 28px; color: #555;">no aceptó la tarjeta</div>
+        <div style="padding: 16px 28px; color: #ED561B; font-size: 24px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 280px 1fr 60px; background: #FAFBFC; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 16px 28px; font-weight: 700;">Azure GPU</div>
+        <div style="padding: 16px 28px; color: #555;">quota tickets en revisión, sin aprobar</div>
+        <div style="padding: 16px 28px; color: #ED561B; font-size: 24px; font-weight: 900;">✗</div>
+      </div>
+      <div style="display:grid; grid-template-columns: 280px 1fr 60px; background: #F0FBEF; border-top: 1px solid #eee; font-size: 22px;">
+        <div style="padding: 16px 28px; font-weight: 900; color: #2E7D2E;">TensorDock · RTX 4090</div>
+        <div style="padding: 16px 28px; color: #2E7D2E;">disponible, instancia spot</div>
+        <div style="padding: 16px 28px; color: #50B432; font-size: 24px; font-weight: 900;">✓</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>32</div></div>
+</section>
+
+<!-- 33. API layer -->
+<section data-label="33 API layer">
+  <div class="slide-pad">
+    <div class="section-tag">Implementación · 11</div>
+    <h1 class="slide-title" style="margin-top: 30px;">La capa de API — dos backends</h1>
+    <h2 class="slide-subtitle">Dev local con Ollama, prod con vLLM. Ambos exponen API compatible OpenAI — el código es el mismo.</h2>
+    <div style="display:grid; grid-template-columns: 1.3fr 1fr; gap: 50px; flex: 1;">
+      <pre class="code" style="font-size: 19px;"><span class="com"># apps/api/app/ocr.py</span>
+<span class="kw">def</span> get_client():
+    backend = os.getenv(<span class="str">"OCR_BACKEND"</span>, <span class="str">"vllm"</span>)
+    <span class="kw">if</span> backend == <span class="str">"ollama"</span>:
+        <span class="kw">return</span> OpenAI(
+            base_url=<span class="str">"http://localhost:11434/v1"</span>,
+            api_key=<span class="str">"ollama"</span>,
+        )
+    <span class="com"># vllm via KServe</span>
+    <span class="kw">return</span> OpenAI(
+        base_url=<span class="str">"http://qwen3-vl-predictor/v1"</span>,
+        api_key=<span class="str">"not-needed"</span>,
+    )</pre>
+      <div style="display:flex; flex-direction:column; gap: 22px; justify-content:center;">
+        <div style="background: #F6F8FA; padding: 22px 28px; border-left: 4px solid #0086FF;">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #0086FF;">DEV</div>
+          <div style="font-size: 22px; margin-top: 8px;"><span class="mono">OCR_BACKEND=ollama</span> → laptop</div>
+        </div>
+        <div style="background: #F6F8FA; padding: 22px 28px; border-left: 4px solid #0086FF;">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.15em; color: #0086FF;">PROD</div>
+          <div style="font-size: 22px; margin-top: 8px;"><span class="mono">OCR_BACKEND=vllm</span> → cluster</div>
+        </div>
+        <div style="font-size: 22px; color: #555; line-height: 1.5; margin-top: 6px;">Mismo código de la API. Solo cambia la <span class="mono">base_url</span>.</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>33</div></div>
+</section>
+
+<!-- 34. MRZ -->
+<section data-label="34 MRZ">
+  <div class="slide-pad">
+    <div class="section-tag">Implementación · 12</div>
+    <h1 class="slide-title" style="margin-top: 30px;">MRZ — trust but verify</h1>
+
+    <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <div style="background: linear-gradient(135deg, #1A3A6B 0%, #0F2547 100%); color: white; padding: 32px 36px; border-radius: 8px; font-family: Consolas, Menlo, monospace;">
+          <div style="font-size: 14px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.7; margin-bottom: 24px;">PASSPORT · ICAO 9303 TD3</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px 28px; font-size: 17px; margin-bottom: 22px;">
+            <div><span style="opacity: 0.6;">Surname</span><br/>HERNANDEZ</div>
+            <div><span style="opacity: 0.6;">Given names</span><br/>JEFFRY</div>
+            <div><span style="opacity: 0.6;">Nationality</span><br/>COL</div>
+            <div><span style="opacity: 0.6;">Date of birth</span><br/>15 MAR 1990</div>
+          </div>
+          <div style="border-top: 1px dashed rgba(255,255,255,0.3); padding-top: 16px;">
+            <div style="font-size: 12px; opacity: 0.6; letter-spacing: 0.2em; margin-bottom: 10px;">MACHINE READABLE ZONE</div>
+            <div style="background: rgba(255,237,180,0.95); color: #000; padding: 12px 16px; font-size: 17px; line-height: 1.5; letter-spacing: 0.05em; border-radius: 3px;">
+              P&lt;COLHERNANDEZ&lt;&lt;JEFFRY&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;&lt;<br/>
+              AB1234567<span style="background: #50B432; color: white; padding: 0 4px;">5</span>COL9003158M3001012<span style="background: #50B432; color: white; padding: 0 4px;">8</span>&lt;&lt;&lt;&lt;&lt;&lt;&lt;
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 22px; color: #555; margin-bottom: 14px;">El VLM <b>extrae</b>, MRZ check digits <b>validan</b>:</div>
+        <pre class="code" style="font-size: 19px;">{
+  <span class="key">"surname"</span>: <span class="str">"HERNANDEZ"</span>,
+  <span class="ok">"passport_number"</span>: <span class="str">"AB1234567"</span>, <span class="com">// ✓</span>
+  <span class="ok">"date_of_birth"</span>:    <span class="str">"1990-03-15"</span>, <span class="com">// ✓</span>
+  <span class="ok">"date_of_expiry"</span>:   <span class="str">"2030-01-01"</span>, <span class="com">// ✓</span>
+  <span class="ok">"sex"</span>:             <span class="str">"M"</span>           <span class="com">// ✓</span>
+}</pre>
+        <div style="background: #F0FBEF; padding: 22px 26px; margin-top: 24px; border-left: 4px solid #50B432; font-size: 21px; line-height: 1.55;">
+          Si valida, MRZ <b>overridea</b> al modelo.<br/>
+          <b>Determinístico encima de probabilístico.</b>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>34</div></div>
+</section>
+
+<!-- 35. Provisioning end-to-end -->
+<section data-label="35 Provisioning">
+  <div class="slide-pad">
+    <div class="section-tag">Implementación · 13</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Provisioning end-to-end — <span class="mono">1</span> comando</h1>
+    <div style="display:grid; grid-template-columns: 1.1fr 1fr; gap: 50px; flex: 1;">
+      <div>
+        <pre class="code" style="font-size: 20px;">$ scripts/provision.sh
+
+<span class="com">┌─ on the VM ─────────────────────┐</span>
+  bootstrap.sh
+    K3s + drivers + container toolkit
+    + kernel pin
+<span class="com">└─────────────────────────────────┘</span>
+
+<span class="com">┌─ local (kubeconfig) ────────────┐</span>
+  install-cluster-deps.sh
+    NVIDIA Device Plugin
+    cert-manager
+    KServe v0.14 (RawDeployment)
+<span class="com">└─────────────────────────────────┘</span>
+
+<span class="com">┌─ helm ──────────────────────────┐</span>
+  helm install model    charts/model
+  helm install api      charts/api
+  helm install frontend charts/frontend
+<span class="com">└─────────────────────────────────┘</span></pre>
+      </div>
+      <div style="display:flex; flex-direction:column; gap: 18px; justify-content:center;">
+        <div style="background: #F6F8FA; border: 2px dashed #0086FF; padding: 30px; text-align:center; min-height: 280px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 10px;">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF;">PLACEHOLDER</div>
+          <div style="font-size: 18px; color: #555; max-width: 320px; line-height: 1.4;">Screenshot del tree del repo</div>
+          <div class="mono" style="font-size: 14px; color: #888; margin-top: 6px;">visuals/01-tree.txt</div>
+        </div>
+        <div style="background: #F0F7FF; padding: 22px 26px; border-left: 4px solid #0086FF; font-size: 22px; line-height: 1.5;">
+          Del setup inicial al sistema corriendo: <b>un comando.</b>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>35</div></div>
+</section>
+
+<!-- 36. Results -->
+<section data-label="36 Results">
+  <div class="slide-pad">
+    <div class="section-tag">Resultados</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Lo que funciona &nbsp;·&nbsp; los caveats</h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 50px; flex: 1;">
+      <div style="background: #F0FBEF; padding: 36px; border-left: 4px solid #50B432;">
+        <div style="display:inline-block; background: #50B432; color: white; padding: 6px 14px; font-size: 16px; font-weight: 900; letter-spacing: 0.15em; margin-bottom: 22px;">FUNCIONA</div>
+        <div style="margin-bottom: 24px;">
+          <div style="font-size: 56px; font-weight: 900; color: #2E7D2E; line-height: 1;">~5–9s</div>
+          <div style="font-size: 22px; color: #444; margin-top: 8px;">latencia end-to-end por imagen<br/><span style="color: #888; font-size: 18px;">(mayor parte = inferencia del modelo)</span></div>
+        </div>
+        <ul class="bullet-list" style="gap: 12px;">
+          <li style="font-size: 22px;">JSON estructurado consistente</li>
+          <li style="font-size: 22px;">MRZ valida en pasaportes legibles</li>
+          <li style="font-size: 22px;">Encadenable con el resto del sistema</li>
+        </ul>
+      </div>
+      <div style="background: #FFF6F2; padding: 36px; border-left: 4px solid #ED561B;">
+        <div style="display:inline-block; background: #ED561B; color: white; padding: 6px 14px; font-size: 16px; font-weight: 900; letter-spacing: 0.15em; margin-bottom: 22px;">CAVEATS</div>
+        <ul class="bullet-list" style="gap: 14px;">
+          <li style="font-size: 22px;">Pasaportes muy dañados → no hay override determinístico</li>
+          <li style="font-size: 22px;">MRZ ilegible → cae al modelo solo</li>
+          <li style="font-size: 22px;">Latencia no es interactiva fina — útil para batch o async</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>36</div></div>
+</section>
+
+<!-- 37. Demo intro -->
+<section data-label="37 Demo intro">
+  <div style="position:absolute; inset:0; background: #0086FF; color: white; display:flex; flex-direction:column; justify-content:center; padding: 0 110px;">
+    <div style="font-size: 28px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 32px;">DEMO EN VIVO &nbsp;·&nbsp; PARTE 04 / 04</div>
+    <h1 style="font-size: 200px; font-weight: 900; line-height: 0.95; margin: 0 0 50px 0; letter-spacing: -0.025em;">OCR<br/>en vivo.</h1>
+    <div style="font-size: 30px; opacity: 0.95; max-width: 1500px; line-height: 1.5;">
+      <b>1.</b> Frontend → upload pasaporte → JSON.<br/>
+      <b>2.</b> <span class="mono">kubectl get inferenceservice</span> + pods.<br/>
+      <b>3.</b> <span class="mono">kubectl logs -f</span> del pod de vLLM.
+    </div>
+  </div>
+</section>
+
+<!-- 38. After demo -->
+<section data-label="38 After demo">
+  <div class="slide-pad">
+    <div class="section-tag">Después del demo</div>
+    <h1 class="slide-title" style="margin-top: 30px;">Lo que vieron</h1>
+    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 30px; flex: 1;">
+      <div style="background: #F6F8FA; padding: 40px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF;">CAPA 1</div>
+        <h3 style="font-size: 30px; margin: 16px 0;">KServe</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Orquestó la request — desde el ingress hasta el pod. Routing, scaling, abstracción.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px; border-top: 6px solid #0086FF;">
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF;">CAPA 2</div>
+        <h3 style="font-size: 30px; margin: 16px 0;">vLLM + Qwen3-VL</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">El runtime corrió la inferencia en la GPU — request normal, API OpenAI-compatible.</div>
+      </div>
+      <div style="background: #F6F8FA; padding: 40px; border-top: 6px solid #50B432;">
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #50B432;">CAPA 3</div>
+        <h3 style="font-size: 30px; margin: 16px 0;">MRZ</h3>
+        <div style="font-size: 22px; line-height: 1.5; color: #444;">Validación determinística sobre la salida del modelo. Guardrail.</div>
+      </div>
+    </div>
+    <div style="text-align: center; font-size: 26px; font-weight: 900; color: #0086FF; margin-top: 36px;">
+      Tres capas. Cada una con su responsabilidad clara.
+    </div>
+  </div>
+  <div class="slide-footer"><div class="footer-mark"><img src="assets/image1.png" alt="CNCF" /></div><div>38</div></div>
+</section>
+
+<!-- 39. Takeaway -->
+<section data-label="39 Takeaway">
+  <div style="position:absolute; inset:0; background: #0086FF; color: white; display:flex; flex-direction:column; justify-content:center; padding: 0 110px;">
+    <div style="font-size: 26px; font-weight: 700; letter-spacing: 0.3em; opacity: 0.85; margin-bottom: 32px;">SI SE LLEVAN UNA SOLA COSA</div>
+    <h1 style="font-size: 100px; font-weight: 900; line-height: 1.05; margin: 0 0 50px 0; letter-spacing: -0.02em; max-width: 1700px;">
+      KServe es la solución de facto para servir AI en Kubernetes.
+    </h1>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; max-width: 1700px;">
+      <div style="font-size: 26px; line-height: 1.55; opacity: 0.95;">
+        El <b>framework</b> hace el grueso del serving — deployments, scaling, routing, abstracciones de storage.
+      </div>
+      <div style="font-size: 26px; line-height: 1.55; opacity: 0.95; border-left: 3px solid white; padding-left: 30px;">
+        Las <b>decisiones de stack</b> — runtime, image pin, strategy — las tomás vos, sabiendo que existen.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 40. Resources & Q&A -->
+<section data-label="40 Resources">
+  <div class="slide-pad">
+    <h1 class="slide-title" style="font-size: 96px;">Gracias.</h1>
+    <h2 class="slide-subtitle" style="font-size: 32px; max-width: 1400px;">Código, contacto, y la pregunta semilla.</h2>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 60px; flex: 1; margin-top: 20px;">
+      <div>
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF; margin-bottom: 18px;">CÓDIGO &amp; SLIDES</div>
+        <div style="font-family: Consolas, Menlo, monospace; font-size: 28px; line-height: 1.8;">
+          github.com/<b>jeffincloud</b>
+        </div>
+        <div style="font-size: 22px; color: #555; line-height: 1.6; margin-top: 18px;">
+          Manifests · charts de Helm · scripts de provisioning · esta presentación.
+        </div>
+        <div style="background: #F6F8FA; border: 2px dashed #0086FF; padding: 24px; margin-top: 24px; text-align:center; min-height: 140px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 6px;">
+          <div style="font-size: 14px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF;">PLACEHOLDER · QR CODE</div>
+          <div class="mono" style="font-size: 14px; color: #888;">visuals/qr-repo.png</div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 24px; font-weight: 700; letter-spacing: 0.2em; color: #0086FF; margin-bottom: 18px;">CONTACTO</div>
+        <div style="font-family: Consolas, Menlo, monospace; font-size: 26px; line-height: 1.8;">
+          linkedin.com/in/<b>jeffry-hernandez</b>
+        </div>
+        <div style="font-size: 22px; color: #555; line-height: 1.6; margin-top: 18px;">
+          Jeffry Hernandez · Senior SRE · Wizeline
+        </div>
+        <div style="background: #FFF6F2; padding: 28px; margin-top: 30px; border-left: 4px solid #ED561B;">
+          <div style="font-size: 18px; font-weight: 700; letter-spacing: 0.2em; color: #ED561B; margin-bottom: 10px;">PREGUNTA SEMILLA</div>
+          <div style="font-size: 26px; line-height: 1.4; font-weight: 900;">"¿Cuál es la pieza más frágil de este stack?"</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top: auto; display:flex; align-items:center; justify-content:space-between; padding-top: 30px; border-top: 1px solid #ddd;">
+      <div style="display:flex; align-items:center; gap: 20px;">
+        <img src="assets/image10.png" alt="CNCG" style="height: 56px;" />
+        <div style="font-size: 22px; color: #888;">CNCG Cali · Abril 2026</div>
+      </div>
+      <div style="font-size: 30px; font-weight: 900; color: #0086FF;">Q &amp; A</div>
+    </div>
+  </div>
+</section>
+
+</deck-stage>
+</body>
+</html>

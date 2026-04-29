@@ -1,0 +1,32 @@
+image:
+  repository: ghcr.io/REPLACE_ME/ocr-lab-frontend
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 80
+
+# nginx in the container substitutes ${API_HOST}:${API_PORT} into the proxy
+# config. Point these at the API service exposed by charts/api.
+api:
+  host: "ocr-api-ocr-api"
+  port: "8080"
+
+ingress:
+  enabled: true
+  # K3s ships traefik by default; switch to "nginx"/"gce"/etc. per environment.
+  className: "traefik"
+  host: ""
+  tls: false
+  annotations: {}
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

@@ -1,0 +1,35 @@
+$ tree -L 3 -I '.venv|__pycache__|fixtures|.git'
+
+.
+├── apps
+│   ├── api
+│   │   ├── app
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt
+│   │   └── scripts
+│   └── frontend
+│       ├── Dockerfile
+│       ├── nginx.conf
+│       └── public
+├── charts
+│   ├── api
+│   │   ├── Chart.yaml
+│   │   ├── templates
+│   │   └── values.yaml
+│   ├── frontend
+│   │   ├── Chart.yaml
+│   │   ├── templates
+│   │   └── values.yaml
+│   └── model
+│       ├── Chart.yaml
+│       ├── templates
+│       └── values.yaml
+├── scripts
+│   ├── install-cluster-deps.sh
+│   └── provision.sh
+├── terraform
+│   └── tensordock
+│       ├── bootstrap.sh
+│       └── RESTORE.md
+└── tests
+    └── test_mrz.py

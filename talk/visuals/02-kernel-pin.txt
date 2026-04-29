@@ -1,0 +1,21 @@
+$ uname -r
+5.15.0-144-generic
+
+$ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+NVIDIA GeForce RTX 4090, 570.144
+
+$ sudo apt-mark showhold | grep linux-
+linux-generic
+linux-image-generic
+linux-image-5.15.0-176-generic
+linux-headers-generic
+linux-headers-5.15.0-176-generic
+linux-modules-5.15.0-176-generic
+linux-modules-extra-5.15.0-176-generic
+
+$ grep ^GRUB_DEFAULT /etc/default/grub
+GRUB_DEFAULT="...>gnulinux-5.15.0-144-generic-advanced-..."
+
+# El kernel nuevo (176) está instalado pero NO se bootea.
+# El kernel viejo (144) tiene los módulos NVIDIA que el .run instaló.
+# apt-mark hold evita que unattended-upgrades los borre.

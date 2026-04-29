@@ -1,0 +1,22 @@
+$ kubectl get inferenceservice,deploy,pod,svc,ingress -n default
+
+NAME                                             URL                                      READY
+inferenceservice.serving.kserve.io/qwen3-vl-4b   http://qwen3-vl-4b-default.example.com   True
+
+NAME                                        READY   AVAILABLE   AGE
+deployment.apps/ocr-api-ocr-api             1/1     1           16h
+deployment.apps/ocr-frontend-ocr-frontend   1/1     1           16h
+deployment.apps/qwen3-vl-4b-predictor       1/1     1           17h
+
+NAME                                             READY   STATUS    AGE
+pod/ocr-api-ocr-api-68cc8cd968-hcbvl             1/1     Running   16h
+pod/ocr-frontend-ocr-frontend-7967b65fb9-f276q   1/1     Running   16h
+pod/qwen3-vl-4b-predictor-56bdfdd745-q9xwx       1/1     Running   6m
+
+NAME                                TYPE        CLUSTER-IP     PORT(S)
+service/ocr-api-ocr-api             ClusterIP   10.43.82.60    8080/TCP
+service/ocr-frontend-ocr-frontend   ClusterIP   10.43.3.66     80/TCP
+service/qwen3-vl-4b-predictor       ClusterIP   10.43.211.97   80/TCP
+
+NAME                                                  ADDRESS          PORTS
+ingress.networking.k8s.io/ocr-frontend-ocr-frontend   <vm-ip>          80

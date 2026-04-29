@@ -1,0 +1,44 @@
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: {{ .Values.runtime.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  supportedModelFormats:
+    - name: huggingface
+      autoSelect: false
+      priority: 1
+  protocolVersions:
+    - v2
+  containers:
+    - name: kserve-container
+      image: {{ .Values.runtime.image | quote }}
+      command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+      args:
+        - --port=8080
+        - --model={{ .Values.model.id }}
+        - --served-model-name={{ .Values.model.servedName }}
+        {{- if .Values.runtime.trustRemoteCode }}
+        - --trust-remote-code
+        {{- end }}
+        - --dtype={{ .Values.runtime.dtype }}
+        - --gpu-memory-utilization={{ .Values.runtime.gpuMemoryUtilization }}
+        - --max-model-len={{ .Values.runtime.maxModelLen }}
+        {{- range .Values.runtime.extraArgs }}
+        - {{ . | quote }}
+        {{- end }}
+      env:
+        - name: HF_HOME
+          value: /root/.cache/huggingface
+        {{- if .Values.huggingfaceTokenSecret }}
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.huggingfaceTokenSecret }}
+              key: token
+        {{- end }}
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+      resources:
+        {{- toYaml .Values.resources | nindent 8 }}
