@@ -10,6 +10,7 @@ terraform.tfvars
 
 # Secrets — block anything that looks like a credential
 *.json
+!charts/observability/files/dashboards/*.json
 !package.json
 !package-lock.json
 !tsconfig.json
@@ -65,3 +66,6 @@ tests/fixtures/passports/*.pdf
 # Misc local
 local_setup
 *.log
+
+# Generated synthetic load-test data (regenerate with tools/passport-gen)
+loadtest/data/

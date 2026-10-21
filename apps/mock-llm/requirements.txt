@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pillow>=10.2
+prometheus-client>=0.20
+opentelemetry-sdk>=1.40,<2
+opentelemetry-exporter-otlp-proto-http>=1.40,<2
