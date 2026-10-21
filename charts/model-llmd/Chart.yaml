@@ -1,0 +1,6 @@
+apiVersion: v2
+name: model-llmd
+description: Qwen3-VL served by KServe LLMInferenceService with the llm-d inference scheduler behind Gateway API
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

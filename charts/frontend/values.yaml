@@ -30,3 +30,12 @@ resources:
   limits:
     cpu: 200m
     memory: 128Mi
+
+# Gateway API alternative to the Ingress (llm-d track: one Envoy Gateway in
+# front of both the app and the model). Disable ingress when enabling this.
+httpRoute:
+  enabled: false
+  gateway:
+    name: kserve-ingress-gateway
+    namespace: kserve
+  hostnames: []

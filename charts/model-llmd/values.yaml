@@ -1,0 +1,43 @@
+# The llm-d track of the lab: same model as charts/model, but served through
+# KServe's LLMInferenceService. KServe creates the vLLM Deployment, an
+# InferencePool, the llm-d endpoint picker (EPP) and an HTTPRoute on the
+# Gateway, so requests are routed by queue depth / KV-cache / prefix-cache
+# state instead of round-robin.
+#
+# Prereqs: scripts/install-llmisvc.sh (KServe v0.21 + Gateway API + GIE CRDs +
+# Envoy Gateway + LWS). Then point the API at the route:
+#   kubectl get llmisvc qwen3-vl-4b -o jsonpath='{.status.url}'
+#
+# NOTE: written against KServe v0.21.0 samples; not yet run on a GPU node.
+
+model:
+  uri: hf://Qwen/Qwen3-VL-4B-Instruct
+  # Served model name; the API sends this as "model".
+  name: qwen3-vl-4b
+
+replicas: 1
+
+# Image KServe's default template uses is ghcr.io/llm-d/llm-d-cuda (vLLM +
+# llm-d extras). Check its CUDA version against the GPU driver on the node
+# (see the vLLM v0.11 pin story in charts/model/values.yaml). Empty = KServe default.
+image: ""
+
+# Extra vLLM flags (passed via VLLM_ADDITIONAL_ARGS).
+vllmArgs: "--max-model-len=8192 --gpu-memory-utilization=0.9 --trust-remote-code"
+
+# End-to-end tracing for every component KServe manages (EPP, vLLM).
+# llm-d only honours parentbased_traceidratio; the lab keeps 100% so the
+# collector's tail sampling decides what to keep.
+tracing:
+  enabled: true
+  exporterEndpoint: http://otel-collector-opentelemetry-collector.monitoring.svc:4317
+  samplerArg: "1.0"
+
+resources:
+  limits: {cpu: "4", memory: 24Gi, nvidia.com/gpu: "1"}
+  requests: {cpu: "2", memory: 16Gi, nvidia.com/gpu: "1"}
+
+runtimeClassName: nvidia
+
+# KServe serves vLLM over TLS (self-signed) when its global EnableTLS is on (default).
+tls: true

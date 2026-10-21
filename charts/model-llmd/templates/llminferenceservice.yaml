@@ -1,0 +1,45 @@
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: {{ .Values.model.name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  model:
+    uri: {{ .Values.model.uri }}
+    name: {{ .Values.model.name }}
+  replicas: {{ .Values.replicas }}
+  router:
+    # llm-d inference scheduler (endpoint picker) with KServe's default
+    # scorers: queue depth, KV-cache utilization, prefix-cache affinity.
+    scheduler: {}
+    route: {}
+    gateway: {}
+  {{- if .Values.tracing.enabled }}
+  tracing:
+    exporterEndpoint: {{ .Values.tracing.exporterEndpoint | quote }}
+    sampler: parentbased_traceidratio
+    samplerArg: {{ .Values.tracing.samplerArg | quote }}
+  {{- end }}
+  template:
+    {{- with .Values.runtimeClassName }}
+    runtimeClassName: {{ . }}
+    {{- end }}
+    containers:
+      - name: main
+        {{- with .Values.image }}
+        image: {{ . }}
+        {{- end }}
+        env:
+          - name: VLLM_ADDITIONAL_ARGS
+            value: {{ .Values.vllmArgs | quote }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        # Model download + load + CUDA graph capture can take minutes on a
+        # cold node; don't let the liveness probe kill a pod that is loading.
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: {{ if .Values.tls }}HTTPS{{ else }}HTTP{{ end }}
+          periodSeconds: 10
+          failureThreshold: 90

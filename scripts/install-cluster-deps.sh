@@ -9,6 +9,7 @@
 #
 # Usage:
 #   KUBECONFIG=~/.kube/ocr-lab.config ./scripts/install-cluster-deps.sh
+#   SKIP_KSERVE=true ...   # device plugin + cert-manager only (llm-d track)
 
 set -euo pipefail
 
@@ -89,43 +90,48 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --wait --timeout 5m
 
 # 3. KServe -------------------------------------------------------------------
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+# SKIP_KSERVE=true when using scripts/install-llmisvc.sh (KServe v0.21 + llm-d) instead.
+if [[ -n "${SKIP_KSERVE:-}" ]]; then
+  log "SKIP_KSERVE set — skipping KServe ${KSERVE_VERSION}."
+else
+  TMP=$(mktemp -d)
+  trap 'rm -rf "$TMP"' EXIT
 
-log "Downloading KServe ${KSERVE_VERSION} chart artifacts..."
-curl -fsSL -o "$TMP/kserve-crd.tgz" \
-  "https://github.com/kserve/kserve/releases/download/${KSERVE_VERSION}/helm-chart-kserve-crd-${KSERVE_VERSION}.tgz"
-curl -fsSL -o "$TMP/kserve.tgz" \
-  "https://github.com/kserve/kserve/releases/download/${KSERVE_VERSION}/helm-chart-kserve-${KSERVE_VERSION}.tgz"
+  log "Downloading KServe ${KSERVE_VERSION} chart artifacts..."
+  curl -fsSL -o "$TMP/kserve-crd.tgz" \
+    "https://github.com/kserve/kserve/releases/download/${KSERVE_VERSION}/helm-chart-kserve-crd-${KSERVE_VERSION}.tgz"
+  curl -fsSL -o "$TMP/kserve.tgz" \
+    "https://github.com/kserve/kserve/releases/download/${KSERVE_VERSION}/helm-chart-kserve-${KSERVE_VERSION}.tgz"
 
-log "Installing kserve-crd..."
-helm upgrade --install kserve-crd "$TMP/kserve-crd.tgz" \
-  --namespace kserve --create-namespace \
-  --wait --timeout 5m
+  log "Installing kserve-crd..."
+  helm upgrade --install kserve-crd "$TMP/kserve-crd.tgz" \
+    --namespace kserve --create-namespace \
+    --wait --timeout 5m
 
-log "Installing kserve (RawDeployment mode)..."
-# First install may racy-fail because the chart ships a ModelMesh webhook that
-# points at a service that doesn't exist until the controller is Running.
-# `--wait` would hang on that. We install without --wait, then apply the fix.
-helm upgrade --install kserve "$TMP/kserve.tgz" \
-  --namespace kserve \
-  --set kserve.controller.deploymentMode=RawDeployment \
-  --timeout 10m || true
+  log "Installing kserve (RawDeployment mode)..."
+  # First install may racy-fail because the chart ships a ModelMesh webhook that
+  # points at a service that doesn't exist until the controller is Running.
+  # `--wait` would hang on that. We install without --wait, then apply the fix.
+  helm upgrade --install kserve "$TMP/kserve.tgz" \
+    --namespace kserve \
+    --set kserve.controller.deploymentMode=RawDeployment \
+    --timeout 10m || true
 
-log "Applying modelmesh-webhook fix (delete-and-reupgrade)..."
-# This validates webhook points at a missing service on first install. Removing
-# it lets cainjector re-issue the caBundle cleanly on the next upgrade.
-kubectl delete validatingwebhookconfiguration \
-  modelmesh-servingruntime.serving.kserve.io --ignore-not-found
+  log "Applying modelmesh-webhook fix (delete-and-reupgrade)..."
+  # This validates webhook points at a missing service on first install. Removing
+  # it lets cainjector re-issue the caBundle cleanly on the next upgrade.
+  kubectl delete validatingwebhookconfiguration \
+    modelmesh-servingruntime.serving.kserve.io --ignore-not-found
 
-helm upgrade kserve "$TMP/kserve.tgz" \
-  --namespace kserve \
-  --reuse-values \
-  --wait --timeout 10m
+  helm upgrade kserve "$TMP/kserve.tgz" \
+    --namespace kserve \
+    --reuse-values \
+    --wait --timeout 10m
 
-log "Waiting for kserve-controller-manager Ready..."
-kubectl wait --for=condition=available deployment/kserve-controller-manager \
-  -n kserve --timeout=5m
+  log "Waiting for kserve-controller-manager Ready..."
+  kubectl wait --for=condition=available deployment/kserve-controller-manager \
+    -n kserve --timeout=5m
 
-log "DONE. Cluster is ready for the OCR lab Helm charts."
-kubectl get pods -n kserve
+  log "DONE. Cluster is ready for the OCR lab Helm charts."
+  kubectl get pods -n kserve
+fi
