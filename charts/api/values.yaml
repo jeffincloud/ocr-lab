@@ -15,21 +15,36 @@ env:
   OPENAI_BASE_URL: "http://qwen3-vl-4b-predictor.default.svc.cluster.local"
   OPENAI_MODEL_NAME: "qwen3-vl-4b"
   OPENAI_TIMEOUT: "60"
+  # Stream responses so the API can time the first token (client-side TTFT).
+  OPENAI_STREAM: "true"
+  # "vllm" when self-hosted; the provider's name (e.g. "openai") for the closed-API comparison.
+  GENAI_PROVIDER_NAME: "vllm"
+  # Put the static prompt before the image (prefix-cache experiment).
+  PROMPT_FIRST: "false"
   MAX_IMAGE_DIM: "1024"
+  UVICORN_WORKERS: "2"
+  API_THREADPOOL_SIZE: "64"
+  # OpenTelemetry: traces, metrics (with exemplars) and logs to the collector.
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.monitoring.svc:4318"
+  OTEL_SERVICE_NAME: "ocr-api"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=ocr-lab,deployment.environment.name=gpu-lab"
   # Set to a comma-separated origin list to opt into CORS. Leave blank when
   # the frontend reverse-proxies /api (the cluster default).
   ALLOWED_ORIGINS: ""
 
+# Image resize + base64 is CPU work: 500m throttled under load. Watch
+# container_cpu_cfs_throttled_periods_total before tightening this.
 resources:
   requests:
-    cpu: 100m
-    memory: 256Mi
-  limits:
     cpu: 500m
     memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 1Gi
 
 probes:
   readinessPath: /healthz
   livenessPath: /healthz
   initialDelaySeconds: 5
   periodSeconds: 10
+  timeoutSeconds: 3

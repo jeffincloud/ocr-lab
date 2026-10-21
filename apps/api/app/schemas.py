@@ -16,6 +16,14 @@ class PassportFields(BaseModel):
     mrz_line2: Optional[str] = None
 
 
+class TokenUsage(BaseModel):
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+
+
 class ExtractResponse(BaseModel):
     fields: PassportFields
     model: str
+    # valid | invalid | missing | unparseable — MRZ check-digit result
+    mrz_result: Optional[str] = None
+    usage: TokenUsage = Field(default_factory=TokenUsage)

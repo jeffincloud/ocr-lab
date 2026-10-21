@@ -6,3 +6,8 @@ httpx>=0.27
 pillow>=10.2
 ollama>=0.3
 mrz>=0.6
+# Telemetry (OTLP/HTTP to the OpenTelemetry Collector)
+opentelemetry-sdk>=1.40,<2
+opentelemetry-exporter-otlp-proto-http>=1.40,<2
+opentelemetry-instrumentation-fastapi>=0.61b0
+opentelemetry-instrumentation-httpx>=0.61b0
