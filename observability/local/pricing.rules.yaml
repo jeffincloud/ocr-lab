@@ -1,0 +1,13 @@
+# Same series the Helm chart renders from charts/observability/values.yaml (pricing).
+groups:
+  - name: ocr-pricing
+    interval: 5m
+    rules:
+      - record: ocr:price:gpu_hourly_usd
+        expr: vector(0.40)
+      - record: ocr:price:input_per_mtok_usd
+        expr: vector(2.50)
+        labels: {gen_ai_request_model: example-frontier-vision-model}
+      - record: ocr:price:output_per_mtok_usd
+        expr: vector(10.00)
+        labels: {gen_ai_request_model: example-frontier-vision-model}

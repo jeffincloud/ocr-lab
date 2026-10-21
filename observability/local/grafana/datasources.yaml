@@ -1,0 +1,66 @@
+# The three datasources are wired to each other so you can move between
+# signals without copying IDs: exemplar -> trace, trace -> logs and metrics,
+# log line -> trace. observability/values/kube-prometheus-stack.yaml carries
+# the same wiring for the cluster.
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: tempo
+        - name: traceID
+          datasourceUid: tempo
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    url: http://tempo:3200
+    jsonData:
+      serviceMap:
+        datasourceUid: prometheus
+      nodeGraph:
+        enabled: true
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: "-2m"
+        spanEndTimeShift: "2m"
+        filterByTraceID: true
+        customQuery: true
+        query: '{service_name="$${__span.tags["service.name"]}"} | trace_id="$${__span.traceId}"'
+      tracesToMetrics:
+        datasourceUid: prometheus
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        queries:
+          - name: Engine queue p95
+            query: histogram_quantile(0.95, sum by (le) (rate(vllm:request_queue_time_seconds_bucket[1m])))
+          - name: KV cache usage
+            query: max(vllm:kv_cache_usage_perc)
+          - name: Requests waiting
+            query: sum(vllm:num_requests_waiting)
+      lokiSearch:
+        datasourceUid: loki
+
+  - name: Loki
+    uid: loki
+    type: loki
+    url: http://loki:3100
+    jsonData:
+      derivedFields:
+        # OTLP logs: trace_id is structured metadata on the log line.
+        - name: TraceID
+          matcherType: label
+          matcherRegex: trace_id
+          datasourceUid: tempo
+          url: "$${__value.raw}"
+        # stdout JSON logs (kubectl logs / filelog): trace_id inside the line.
+        - name: TraceID (json)
+          matcherRegex: '"trace_id":\s*"(\w+)"'
+          datasourceUid: tempo
+          url: "$${__value.raw}"

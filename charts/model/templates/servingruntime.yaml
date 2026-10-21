@@ -24,12 +24,25 @@ spec:
         - --dtype={{ .Values.runtime.dtype }}
         - --gpu-memory-utilization={{ .Values.runtime.gpuMemoryUtilization }}
         - --max-model-len={{ .Values.runtime.maxModelLen }}
+        {{- if .Values.tracing.enabled }}
+        - --otlp-traces-endpoint={{ .Values.tracing.otlpEndpoint }}
+        - --collect-detailed-traces={{ .Values.tracing.detailedTraces }}
+        {{- end }}
         {{- range .Values.runtime.extraArgs }}
         - {{ . | quote }}
         {{- end }}
       env:
         - name: HF_HOME
           value: /root/.cache/huggingface
+        {{- if .Values.tracing.enabled }}
+        - name: OTEL_SERVICE_NAME
+          value: {{ .Values.tracing.serviceName | quote }}
+        - name: OTEL_EXPORTER_OTLP_TRACES_INSECURE
+          value: "true"
+        {{- end }}
+        {{- with .Values.runtime.extraEnv }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
         {{- if .Values.huggingfaceTokenSecret }}
         - name: HF_TOKEN
           valueFrom:

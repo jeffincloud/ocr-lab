@@ -1,0 +1,167 @@
+# OpenTelemetry Collector: the lab's single choke point for telemetry.
+#
+# Everything the API, the model server and the gateway emit over OTLP passes
+# through here before it is stored. That makes it the place to enforce the
+# PII policy and the cardinality budget, independent of what any one service
+# remembers to do (see observability/README.md).
+#
+# Used as-is by observability/local (docker compose) and, with k8s.yaml layered
+# on top, by the Helm install. Endpoints come from environment variables.
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 20
+
+  resource/lab:
+    attributes:
+      - key: deployment.environment.name
+        value: ${env:LAB_ENVIRONMENT}
+        action: upsert
+
+  # --- PII, layer 1: span attributes are fail-closed -------------------------
+  # Only attribute keys matching ignored_key_patterns pass untouched. Keys in
+  # allowed_keys pass but their values are scanned with blocked_values. Every
+  # other key is dropped: a developer who adds
+  # `span.set_attribute("passport.surname", ...)` loses it here, not in a
+  # storage backend. New keys must be added on purpose, in review.
+  # (Applies to span events too, so exception stack traces are dropped and
+  # exception messages are masked.)
+  redaction/spans:
+    allow_all_keys: false
+    allowed_keys:
+      - exception.message
+    blocked_values:
+      - 'P<[A-Z<]{3}[A-Z<]{30,41}'
+      - '[A-Z0-9<]{9}[0-9][A-Z<]{3}[0-9]{6}[0-9][MF<][0-9]{6}[0-9][A-Z0-9<]{14,16}'
+      - 'data:image/[a-z]+;base64,[A-Za-z0-9+/=]+'
+      - '(?i)bearer [A-Za-z0-9._-]+'
+    ignored_key_patterns:
+      - '^exception\.(type|escaped)$'
+      - '^http\.(request|response)\.(method|status_code|body\.size|header\.content-length)$'
+      - '^http\.(route|method|status_code|scheme|flavor)$'
+      - '^url\.(scheme|path|template)$'
+      - '^(server|client|network|net)\.(address|port|protocol\.name|protocol\.version|transport|peer\.name|peer\.port|host\.name|host\.port|type)$'
+      - '^user_agent\.original$'
+      - '^error\.type$'
+      - '^otel\.'
+      - '^gen_ai\.(operation\.name|provider\.name|system|output\.type)$'
+      - '^gen_ai\.request\.(model|max_tokens|temperature|top_p|n|seed)$'
+      - '^gen_ai\.response\.(id|model|finish_reasons)$'
+      - '^gen_ai\.usage\.(input_tokens|output_tokens|prompt_tokens|completion_tokens)$'
+      - '^gen_ai\.latency\.'
+      - '^ocr\.(outcome|request_id|image\.(input_bytes|sent_bytes|format)|mrz\.result|upstream\.(request_id|time_to_first_token|ratelimit\.remaining\.[a-z_]+))$'
+      - '^llm_d\.'
+      - '^k8s\.'
+    summary: info
+
+  # --- PII, layer 2: values that look like passport data or secrets ---------
+  # Exception messages, stack traces and log text are free-form, so they are
+  # value-scanned instead. Patterns: TD3 MRZ lines, base64 image payloads,
+  # bearer tokens and API keys.
+  transform/scrub:
+    error_mode: ignore
+    trace_statements:
+      - context: spanevent
+        statements:
+          - replace_all_patterns(spanevent.attributes, "value", "P<[A-Z<]{3}[A-Z<]{30,41}", "[MRZ-REDACTED]")
+          - replace_all_patterns(spanevent.attributes, "value", "[A-Z0-9<]{9}[0-9][A-Z<]{3}[0-9]{6}[0-9][MF<][0-9]{6}[0-9][A-Z0-9<]{14,16}", "[MRZ-REDACTED]")
+          - replace_all_patterns(spanevent.attributes, "value", "data:image/[a-z]+;base64,[A-Za-z0-9+/=]+", "[IMAGE-REDACTED]")
+          - replace_all_patterns(spanevent.attributes, "value", "input_value=[^,\\n]*", "input_value=[REDACTED]")
+          - truncate_all(spanevent.attributes, 2048)
+    log_statements:
+      - context: log
+        statements:
+          - replace_pattern(log.body, "P<[A-Z<]{3}[A-Z<]{30,41}", "[MRZ-REDACTED]")
+          - replace_pattern(log.body, "[A-Z0-9<]{9}[0-9][A-Z<]{3}[0-9]{6}[0-9][MF<][0-9]{6}[0-9][A-Z0-9<]{14,16}", "[MRZ-REDACTED]")
+          - replace_pattern(log.body, "data:image/[a-z]+;base64,[A-Za-z0-9+/=]+", "[IMAGE-REDACTED]")
+          - replace_all_patterns(log.attributes, "value", "P<[A-Z<]{3}[A-Z<]{30,41}", "[MRZ-REDACTED]")
+          - replace_all_patterns(log.attributes, "value", "input_value=[^,\\n]*", "input_value=[REDACTED]")
+          - replace_all_patterns(log.attributes, "value", "(?i)bearer [A-Za-z0-9._-]+", "Bearer [REDACTED]")
+          - truncate_all(log.attributes, 4096)
+
+  # --- Cardinality budget ---------------------------------------------------
+  # Metric attributes that are unbounded per request never reach Prometheus,
+  # whoever adds them. IDs belong on spans and exemplars, not on series.
+  transform/cardinality:
+    error_mode: ignore
+    metric_statements:
+      - context: datapoint
+        statements:
+          - delete_matching_keys(datapoint.attributes, "^(url\\.full|http\\.url|http\\.target|url\\.query|client\\.address|net\\.sock\\.peer\\.(addr|port)|client\\.port|user\\.id|session\\.id|ocr\\.request_id|gen_ai\\.response\\.id)$")
+
+  # Keep every error and every slow trace; sample the rest. Exemplars point at
+  # trace IDs, so the default keeps 100% in the lab to keep every exemplar
+  # clickable. Lower TRACE_SAMPLE_PERCENT for long soak runs.
+  tail_sampling:
+    decision_wait: 15s
+    num_traces: 50000
+    policies:
+      - name: errors
+        type: status_code
+        status_code: {status_codes: [ERROR]}
+      - name: slow
+        type: latency
+        latency: {threshold_ms: 8000}
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: ${env:TRACE_SAMPLE_PERCENT}
+
+  batch:
+    send_batch_size: 2048
+    timeout: 2s
+
+exporters:
+  otlp/tempo:
+    endpoint: ${env:TEMPO_OTLP_GRPC_ENDPOINT}
+    tls:
+      insecure: true
+  # Prometheus' native OTLP receiver (keeps exemplars).
+  otlphttp/prometheus:
+    metrics_endpoint: ${env:PROMETHEUS_OTLP_ENDPOINT}
+    tls:
+      insecure: true
+  # Loki's native OTLP endpoint (trace_id/span_id stored as structured metadata).
+  otlphttp/loki:
+    endpoint: ${env:LOKI_OTLP_ENDPOINT}
+    tls:
+      insecure: true
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      level: normal
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, redaction/spans, transform/scrub, resource/lab, tail_sampling, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/cardinality, resource/lab, batch]
+      exporters: [otlphttp/prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/scrub, resource/lab, batch]
+      exporters: [otlphttp/loki]

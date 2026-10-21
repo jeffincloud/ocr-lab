@@ -1,0 +1,17 @@
+# NVIDIA DCGM exporter (standalone; the lab doesn't run the GPU Operator).
+# Adds pod/namespace labels to GPU series so they join with vLLM metrics.
+serviceMonitor:
+  enabled: true
+  interval: 10s
+  additionalLabels:
+    release: kps
+kubernetes:
+  enablePodLabels: true
+extraEnv:
+  - name: DCGM_EXPORTER_KUBERNETES
+    value: "true"
+# Profiling fields (SM/tensor/DRAM active) are in the default counters on
+# datacenter GPUs; consumer GPUs may not report them.
+runtimeClassName: nvidia
+tolerations:
+  - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}

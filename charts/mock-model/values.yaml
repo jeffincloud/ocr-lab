@@ -1,0 +1,19 @@
+# Point the API at it with: --set env.OPENAI_BASE_URL=http://mock-llm.<ns>.svc:8080
+image:
+  repository: ghcr.io/REPLACE_ME/ocr-lab-mock-llm
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+servedName: qwen3-vl-4b
+
+# See apps/mock-llm/README.md. Startup delay simulates model loading so the
+# cold-start dashboard has something to show.
+env:
+  MOCK_STARTUP_SECONDS: "45"
+  MOCK_MAX_NUM_SEQS: "16"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector-opentelemetry-collector.monitoring.svc:4318"
+  OTEL_SERVICE_NAME: "mock-llm"
+
+resources:
+  requests: {cpu: 200m, memory: 256Mi}
+  limits: {cpu: "1", memory: 512Mi}

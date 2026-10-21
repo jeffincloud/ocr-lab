@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ocr-observability
+description: OCR lab telemetry wiring — collector config, scrape targets, SLO/cost rules and Grafana dashboards
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

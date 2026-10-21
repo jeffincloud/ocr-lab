@@ -1,0 +1,93 @@
+# The OCR lab and its full observability stack on a laptop, no GPU needed.
+# The model is apps/mock-llm (a fake vLLM). Latency numbers are illustrative;
+# use this to build dashboards, rehearse demos and test SLO/PII rules.
+#
+#   python tools/passport-gen/generate.py --count 300 --out loadtest/data/passports
+#   docker compose -f observability/local/compose.yaml up -d --build
+#   k6 run -e BASE_URL=http://localhost:8080/api -e SCENARIO=users -e PEAK_USERS=40 loadtest/k6/ocr-users.js
+#
+# Grafana: http://localhost:3000 (anonymous admin). App: http://localhost:8080
+name: ocr-lab
+
+x-otel-env: &otel-env
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_RESOURCE_ATTRIBUTES: service.version=dev,deployment.environment.name=local
+
+services:
+  mock-llm:
+    build: ../../apps/mock-llm
+    image: ocr-lab-mock-llm:dev
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: mock-llm
+      MOCK_STARTUP_SECONDS: "20"
+
+  api:
+    build: ../../apps/api
+    image: ocr-lab-api:dev
+    environment:
+      <<: *otel-env
+      OTEL_SERVICE_NAME: ocr-api
+      OPENAI_BASE_URL: http://mock-llm:8080
+      OPENAI_MODEL_NAME: qwen3-vl-4b
+      GENAI_PROVIDER_NAME: vllm
+    depends_on: [mock-llm, otel-collector]
+
+  frontend:
+    build: ../../apps/frontend
+    image: ocr-lab-frontend:dev
+    environment:
+      API_HOST: api
+      API_PORT: "8080"
+    ports: ["8080:80"]
+    depends_on: [api]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.162.0
+    command: ["--config=/etc/otelcol/base.yaml"]
+    volumes:
+      - ../../charts/observability/files/collector/base.yaml:/etc/otelcol/base.yaml:ro
+    environment:
+      LAB_ENVIRONMENT: local
+      TRACE_SAMPLE_PERCENT: "100"
+      TEMPO_OTLP_GRPC_ENDPOINT: tempo:4317
+      PROMETHEUS_OTLP_ENDPOINT: http://prometheus:9090/api/v1/otlp/v1/metrics
+      LOKI_OTLP_ENDPOINT: http://loki:3100/otlp
+    ports: ["4318:4318"]
+    depends_on: [prometheus, tempo, loki]
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --web.enable-otlp-receiver
+      - --web.enable-remote-write-receiver
+      - --enable-feature=exemplar-storage
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ../../charts/observability/files/rules:/etc/prometheus/rules:ro
+      - ./pricing.rules.yaml:/etc/prometheus/local-rules/pricing.rules.yaml:ro
+    ports: ["9090:9090"]
+
+  tempo:
+    image: grafana/tempo:3.1.0
+    command: ["-target=all", "-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml:ro
+
+  loki:
+    image: grafana/loki:3.6.12
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/ocr.yaml:ro
+      - ./grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/ocr.yaml:ro
+      - ../../charts/observability/files/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]

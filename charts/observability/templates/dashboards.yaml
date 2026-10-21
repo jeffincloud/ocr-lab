@@ -1,0 +1,15 @@
+{{- range $path, $_ := .Files.Glob "files/dashboards/*.json" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocr-dashboard-{{ base $path | trimSuffix ".json" }}
+  labels:
+    {{- include "obs.labels" $ | nindent 4 }}
+    {{ $.Values.dashboards.label }}: "1"
+  annotations:
+    grafana_folder: {{ $.Values.dashboards.folder | quote }}
+data:
+  {{ base $path }}: |-
+    {{- $.Files.Get $path | nindent 4 }}
+{{- end }}

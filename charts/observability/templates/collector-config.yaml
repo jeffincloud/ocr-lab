@@ -1,0 +1,13 @@
+# Mounted by the OpenTelemetry Collector chart (configMap.existingName). The
+# collector runs with --config relay.yaml --config k8s.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.collector.configMapName }}
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+data:
+  relay: |
+    {{- .Files.Get "files/collector/base.yaml" | nindent 4 }}
+  k8s: |
+    {{- .Files.Get "files/collector/k8s.yaml" | nindent 4 }}

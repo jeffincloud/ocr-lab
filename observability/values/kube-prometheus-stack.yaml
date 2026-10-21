@@ -1,0 +1,100 @@
+# kube-prometheus-stack for the OCR lab (single node). Release name: kps, namespace: monitoring.
+fullnameOverride: kps
+
+# Prometheus takes OTLP metrics from the collector (with exemplars) and
+# remote-write from Tempo's metrics generator, scrapes vLLM/DCGM via
+# PodMonitors/ServiceMonitors, and evaluates the SLO/cost rules from
+# charts/observability.
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    enableOTLPReceiver: true
+    enableRemoteWriteReceiver: true
+    enableFeatures: [exemplar-storage]
+    exemplars:
+      maxSize: 100000
+    otlp:
+      promoteResourceAttributes:
+        - service.name
+        - service.version
+        - deployment.environment.name
+        - k8s.namespace.name
+        - k8s.pod.name
+    # Pick up PodMonitors/rules from every release, not just this chart's.
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    resources:
+      requests: {cpu: 200m, memory: 1Gi}
+      limits: {memory: 3Gi}
+
+alertmanager:
+  enabled: true
+
+kube-state-metrics:
+  # kube_pod_status_ready_time / kube_pod_created feed the cold-start rules.
+  metricLabelsAllowlist:
+    - pods=[app.kubernetes.io/name,serving.kserve.io/inferenceservice,app.kubernetes.io/component]
+
+grafana:
+  adminPassword: change-me-ocr-lab
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+    datasources:
+      enabled: true
+      uid: prometheus
+      # Exemplar dots on latency panels open the trace in Tempo.
+      exemplarTraceIdDestinations:
+        datasourceUid: tempo
+        traceIdLabelName: trace_id
+  additionalDataSources:
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      url: http://tempo.monitoring.svc:3200
+      jsonData:
+        serviceMap: {datasourceUid: prometheus}
+        nodeGraph: {enabled: true}
+        lokiSearch: {datasourceUid: loki}
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: "-2m"
+          spanEndTimeShift: "2m"
+          filterByTraceID: true
+          customQuery: true
+          query: '{service_name="$${__span.tags["service.name"]}"} | trace_id="$${__span.traceId}"'
+        tracesToMetrics:
+          datasourceUid: prometheus
+          spanStartTimeShift: "-5m"
+          spanEndTimeShift: "5m"
+          queries:
+            - name: Engine queue p95
+              query: histogram_quantile(0.95, sum by (le) (rate(vllm:request_queue_time_seconds_bucket[1m])))
+            - name: KV cache usage
+              query: max(vllm:kv_cache_usage_perc)
+            - name: GPU SM active
+              query: avg(DCGM_FI_PROF_SM_ACTIVE)
+    - name: Loki
+      uid: loki
+      type: loki
+      url: http://loki-gateway.monitoring.svc
+      jsonData:
+        derivedFields:
+          - name: TraceID
+            matcherType: label
+            matcherRegex: trace_id
+            datasourceUid: tempo
+            url: "$${__value.raw}"
+          - name: TraceID (json)
+            matcherRegex: '"trace_id":\s*"(\w+)"'
+            datasourceUid: tempo
+            url: "$${__value.raw}"

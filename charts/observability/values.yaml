@@ -1,0 +1,65 @@
+# Installed by observability/install.sh after kube-prometheus-stack, Tempo,
+# Loki and the OpenTelemetry Collector. See observability/README.md.
+
+# Labels that kube-prometheus-stack selects PodMonitors/rules by (its release name).
+prometheusReleaseLabel: kps
+
+collector:
+  # ConfigMap the collector chart mounts (configMap.existingName in values/otel-collector.yaml).
+  configMapName: ocr-otel-collector
+
+dashboards:
+  # The Grafana sidecar in kube-prometheus-stack loads ConfigMaps with this label.
+  label: grafana_dashboard
+  folder: OCR Lab
+
+# Scrape targets for inference engines. Enable the ones you deploy.
+scrape:
+  # vLLM behind a KServe InferenceService (charts/model, RawDeployment).
+  kserveVllm:
+    enabled: true
+    namespace: default
+    selector:
+      matchExpressions:
+        - {key: serving.kserve.io/inferenceservice, operator: Exists}
+    targetPort: 8080
+  # vLLM pods of a KServe LLMInferenceService (llm-d integration). They serve on 8000,
+  # with TLS when KServe's global EnableTLS is on (the default install).
+  llmisvcVllm:
+    enabled: false
+    namespace: default
+    selector:
+      matchLabels:
+        app.kubernetes.io/part-of: llminferenceservice
+        kserve.io/component: workload
+    targetPort: 8000
+    scheme: https
+  # llm-d endpoint picker (EPP / inference scheduler) metrics.
+  llmdScheduler:
+    enabled: false
+    namespace: default
+    selector:
+      matchLabels:
+        app.kubernetes.io/part-of: llminferenceservice
+        app.kubernetes.io/component: llminferenceservice-router-scheduler
+    targetPort: 9090
+    scheme: http
+  # charts/mock-model (no-GPU development).
+  mockLlm:
+    enabled: false
+    namespace: default
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: mock-llm
+    targetPort: 8080
+
+# Prices behind the cost-per-request panels. Set them to what you actually pay.
+pricing:
+  # Hourly price of the GPU instance (on-demand, all-in).
+  gpuHourlyUsd: 0.40
+  # Hosted-API prices per million tokens, keyed by the model name the API reports
+  # (gen_ai.request.model). Add the model you compare against.
+  apiModels:
+    - model: example-frontier-vision-model
+      inputPerMTokUsd: 2.50
+      outputPerMTokUsd: 10.00

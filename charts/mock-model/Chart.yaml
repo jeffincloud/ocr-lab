@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mock-model
+description: Fake vLLM (apps/mock-llm) for running the OCR lab and its telemetry without a GPU
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

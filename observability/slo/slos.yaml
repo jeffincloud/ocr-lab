@@ -1,0 +1,81 @@
+# SLOs as code. Edit targets here, then regenerate the Prometheus rules:
+#
+#   python observability/slo/generate.py
+#
+# Each SLO is a ratio of bad events to valid events. The generator writes
+# SLI recording rules for several windows, error-budget gauges and
+# multi-window, multi-burn-rate alerts (Google SRE workbook, chapter 5).
+#
+# Start with these targets, run the baseline load test on the real GPU, then
+# tighten or loosen them from measured data. An SLO nobody can meet, or one
+# that is always green, teaches nothing.
+
+window: 28d
+
+slos:
+  - name: ocr-availability
+    layer: application
+    description: Extraction requests that did not fail on our side (5xx). Bad uploads (4xx) are excluded.
+    objective: 99.5
+    bad: sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[{{window}}]))
+    total: sum(rate(ocr_extractions_total{outcome!="bad_request"}[{{window}}]))
+
+  - name: ocr-latency
+    layer: application
+    description: Successful extractions answered within 8 s, measured inside the API.
+    objective: 95
+    bad: >-
+      sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[{{window}}]))
+      - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[{{window}}]))
+    total: sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[{{window}}]))
+
+  - name: ocr-mrz-validity
+    layer: quality
+    description: >-
+      Extractions whose MRZ passes ICAO 9303 check digits. Label-free ground
+      truth: a wrong character in the MRZ almost always breaks a check digit.
+    objective: 98
+    bad: sum(rate(ocr_mrz_checks_total{result!="valid"}[{{window}}]))
+    total: sum(rate(ocr_mrz_checks_total[{{window}}]))
+
+  - name: ocr-visual-agreement
+    layer: quality
+    description: >-
+      Fields the model read from the printed page that agree with the
+      validated MRZ. Catches visual-reading regressions that the MRZ override
+      would otherwise hide.
+    objective: 97
+    bad: sum(rate(ocr_mrz_field_agreement_total{agree="false"}[{{window}}]))
+    total: sum(rate(ocr_mrz_field_agreement_total[{{window}}]))
+
+  - name: inference-ttft
+    layer: inference
+    description: Requests whose first token came back within 2.5 s, measured by the engine (vLLM).
+    objective: 95
+    bad: >-
+      sum(rate(vllm:time_to_first_token_seconds_count[{{window}}]))
+      - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[{{window}}]))
+    total: sum(rate(vllm:time_to_first_token_seconds_count[{{window}}]))
+
+# Leading indicators: not SLOs, but they move before the SLOs burn.
+saturation_alerts:
+  - name: InferenceQueueBuilding
+    expr: histogram_quantile(0.95, sum by (le) (rate(vllm:request_queue_time_seconds_bucket[5m]))) > 1
+    for: 5m
+    summary: p95 time waiting in the vLLM queue is above 1 s; the engine is saturated.
+  - name: KVCacheNearlyFull
+    expr: max(vllm:kv_cache_usage_perc) > 0.9
+    for: 5m
+    summary: KV cache above 90%; expect preemptions and TTFT growth.
+  - name: InferencePreemptions
+    expr: sum(rate(vllm:num_preemptions_total[5m])) > 0
+    for: 2m
+    summary: vLLM is preempting sequences (KV cache pressure).
+  - name: GPUThrottling
+    expr: max(DCGM_FI_DEV_GPU_TEMP) > 83 or max(DCGM_FI_DEV_CLOCK_THROTTLE_REASONS) > 1
+    for: 5m
+    summary: GPU hot or clock-throttled; sustained-load latency will drift.
+  - name: GPUXidError
+    expr: max(DCGM_FI_DEV_XID_ERRORS) > 0
+    for: 0m
+    summary: The GPU driver reported an XID error.

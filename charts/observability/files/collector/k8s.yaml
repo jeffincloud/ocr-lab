@@ -1,0 +1,64 @@
+# Layered on top of base.yaml inside Kubernetes (collector --config base --config k8s).
+# Adds pod/namespace/node metadata so every span, metric and log can be joined
+# with kube-state-metrics, DCGM (by pod) and Kubernetes events, and collects
+# two log sources that matter for cold starts:
+#   - container logs of the model server (vLLM prints weight-load and
+#     CUDA-graph-capture times) and the gateway;
+#   - Kubernetes events (Scheduled, Pulling, Pulled, Started, Unhealthy).
+# The collector runs as a DaemonSet; on a multi-node cluster move the events
+# receiver to a single-replica collector so events aren't collected N times.
+
+receivers:
+  filelog/pods:
+    include:
+      - /var/log/pods/${env:LOG_NAMESPACES_GLOB}_*/*/*.log
+    exclude:
+      - /var/log/pods/*_opentelemetry-collector*/*/*.log
+    start_at: end
+    include_file_path: true
+    operators:
+      - type: container
+        id: container-parser
+  k8sobjects/events:
+    objects:
+      - name: events
+        mode: watch
+        group: events.k8s.io
+
+processors:
+  k8sattributes:
+    auth_type: serviceAccount
+    passthrough: false
+    extract:
+      metadata:
+        - k8s.namespace.name
+        - k8s.pod.name
+        - k8s.pod.uid
+        - k8s.node.name
+        - k8s.deployment.name
+        - k8s.container.name
+      labels:
+        - tag_name: app.kubernetes.io/name
+          key: app.kubernetes.io/name
+          from: pod
+    pod_association:
+      - sources:
+          - from: resource_attribute
+            name: k8s.pod.ip
+      - sources:
+          - from: connection
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, redaction/spans, transform/scrub, resource/lab, tail_sampling, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, transform/cardinality, resource/lab, batch]
+      exporters: [otlphttp/prometheus]
+    logs:
+      receivers: [otlp, filelog/pods, k8sobjects/events]
+      processors: [memory_limiter, k8sattributes, transform/scrub, resource/lab, batch]
+      exporters: [otlphttp/loki]

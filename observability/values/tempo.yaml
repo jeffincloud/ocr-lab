@@ -1,0 +1,15 @@
+# Tempo (grafana-community/tempo) single binary. Span metrics and the service
+# graph are remote-written into Prometheus with exemplars.
+tempo:
+  reportingEnabled: false
+  retention: 72h
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://kps-prometheus.monitoring.svc:9090/api/v1/write
+  overrides:
+    defaults:
+      metrics_generator:
+        processors: [service-graphs, span-metrics]
+persistence:
+  enabled: true
+  size: 20Gi

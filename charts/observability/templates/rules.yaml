@@ -1,0 +1,35 @@
+{{- range $path, $_ := .Files.Glob "files/rules/*.yaml" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ocr-{{ base $path | trimSuffix ".yaml" | replace "." "-" }}
+  labels:
+    {{- include "obs.labels" $ | nindent 4 }}
+spec:
+  {{- $.Files.Get $path | fromYaml | toYaml | nindent 2 }}
+{{- end }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ocr-pricing
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: ocr-pricing
+      interval: 5m
+      rules:
+        - record: ocr:price:gpu_hourly_usd
+          expr: vector({{ .Values.pricing.gpuHourlyUsd }})
+        {{- range .Values.pricing.apiModels }}
+        - record: ocr:price:input_per_mtok_usd
+          expr: vector({{ .inputPerMTokUsd }})
+          labels:
+            gen_ai_request_model: {{ .model | quote }}
+        - record: ocr:price:output_per_mtok_usd
+          expr: vector({{ .outputPerMTokUsd }})
+          labels:
+            gen_ai_request_model: {{ .model | quote }}
+        {{- end }}

@@ -10,6 +10,17 @@ runtime:
   gpuMemoryUtilization: 0.9
   trustRemoteCode: true
   extraArgs: []
+  extraEnv: []
+
+# vLLM request tracing (one span per request with queue/prefill/decode timings,
+# joined to the API's trace through the traceparent header). Needs an image
+# with the OpenTelemetry packages: build apps/vllm-otel and set runtime.image.
+tracing:
+  enabled: false
+  otlpEndpoint: http://otel-collector-opentelemetry-collector.monitoring.svc:4317
+  serviceName: vllm
+  # model, worker or all: extra engine-level timing attributes on the span.
+  detailedTraces: all
 
 runtimeClassName: nvidia
 

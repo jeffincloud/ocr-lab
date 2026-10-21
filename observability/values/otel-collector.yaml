@@ -1,0 +1,47 @@
+# OpenTelemetry Collector (contrib) as a DaemonSet: OTLP gateway for the apps
+# plus pod logs and Kubernetes events. Its pipeline lives in
+# charts/observability/files/collector/{base,k8s}.yaml, rendered into the
+# ConfigMap "ocr-otel-collector" by the ocr-observability chart.
+mode: daemonset
+image:
+  repository: otel/opentelemetry-collector-contrib
+command:
+  name: otelcol-contrib
+  extraArgs: ["--config=/conf-k8s/k8s.yaml"]
+configMap:
+  create: false
+  existingName: ocr-otel-collector
+extraVolumes:
+  - name: k8s-overlay
+    configMap:
+      name: ocr-otel-collector
+      items: [{key: k8s, path: k8s.yaml}]
+extraVolumeMounts:
+  - name: k8s-overlay
+    mountPath: /conf-k8s
+presets:
+  # Only for the volumes and RBAC; the pipeline itself is in k8s.yaml.
+  logsCollection: {enabled: true}
+  kubernetesAttributes: {enabled: true}
+  kubernetesEvents: {enabled: true}
+service:
+  enabled: true
+ports:
+  otlp: {enabled: true}
+  otlp-http: {enabled: true}
+  metrics: {enabled: true, containerPort: 8888, servicePort: 8888, protocol: TCP}
+  jaeger-compact: {enabled: false}
+  jaeger-thrift: {enabled: false}
+  jaeger-grpc: {enabled: false}
+  zipkin: {enabled: false}
+extraEnvs:
+  - {name: LAB_ENVIRONMENT, value: gpu-lab}
+  - {name: TRACE_SAMPLE_PERCENT, value: "100"}
+  - {name: TEMPO_OTLP_GRPC_ENDPOINT, value: tempo.monitoring.svc:4317}
+  - {name: PROMETHEUS_OTLP_ENDPOINT, value: http://kps-prometheus.monitoring.svc:9090/api/v1/otlp/v1/metrics}
+  - {name: LOKI_OTLP_ENDPOINT, value: http://loki-gateway.monitoring.svc/otlp}
+  # Pod-log namespaces to tail (brace glob).
+  - {name: LOG_NAMESPACES_GLOB, value: "{default,kserve,llm-d,envoy-gateway-system}"}
+resources:
+  requests: {cpu: 100m, memory: 256Mi}
+  limits: {memory: 1Gi}

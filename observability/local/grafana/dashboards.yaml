@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: ocr-lab
+    folder: OCR Lab
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

@@ -1,0 +1,79 @@
+# Recording rules for dashboards: cost per request, efficiency and cold start.
+# Prices are not here; they come from the ocr:price:* series in pricing rules
+# (rendered from the chart's values.yaml, or observability/local/pricing.rules.yaml).
+
+groups:
+  - name: ocr-throughput
+    interval: 30s
+    rules:
+      - record: ocr:extractions:rate5m
+        expr: sum by (outcome) (rate(ocr_extractions_total[5m]))
+      - record: ocr:extractions_ok:rate1h
+        expr: sum(rate(ocr_extractions_total{outcome="ok"}[1h]))
+      - record: ocr:tokens:rate1h
+        expr: >-
+          sum by (gen_ai_provider_name, gen_ai_request_model, gen_ai_token_type)
+          (rate(gen_ai_client_token_usage_sum[1h]))
+
+  - name: ocr-cost
+    interval: 1m
+    rules:
+      # Self-hosted: the GPU costs the same per hour whether it serves 1 or
+      # 10,000 requests, so cost per request falls as utilization rises.
+      - record: ocr:cost_per_1k_extractions_usd
+        expr: >-
+          (ocr:price:gpu_hourly_usd / 3600)
+          / on () clamp_min(ocr:extractions_ok:rate1h, 1e-9) * 1000
+        labels:
+          pricing: self_hosted
+      # Hosted API: you pay per token, so cost per request is flat and
+      # proportional to tokens per request (image size drives input tokens).
+      - record: ocr:cost_per_1k_extractions_usd
+        expr: >-
+          (
+            sum by (gen_ai_request_model) (ocr:tokens:rate1h{gen_ai_token_type="input", gen_ai_provider_name!="vllm"})
+              * on (gen_ai_request_model) group_left ocr:price:input_per_mtok_usd / 1e6
+            + sum by (gen_ai_request_model) (ocr:tokens:rate1h{gen_ai_token_type="output", gen_ai_provider_name!="vllm"})
+              * on (gen_ai_request_model) group_left ocr:price:output_per_mtok_usd / 1e6
+          )
+          / on () group_left clamp_min(ocr:extractions_ok:rate1h, 1e-9) * 1000
+        labels:
+          pricing: hosted_api
+      # What the GPU would cost per 1k extractions if run at the best
+      # throughput seen in the last day (the floor you can reach by batching).
+      - record: ocr:cost_per_1k_extractions_at_peak_usd
+        expr: >-
+          (ocr:price:gpu_hourly_usd / 3600)
+          / on () clamp_min(max_over_time(sum(rate(ocr_extractions_total{outcome="ok"}[5m]))[1d:5m]), 1e-9) * 1000
+      - record: ocr:gpu_tokens_per_usd
+        expr: >-
+          sum(rate(vllm:generation_tokens_total[5m]) + rate(vllm:prompt_tokens_total[5m])) * 3600
+          / on () ocr:price:gpu_hourly_usd
+
+  - name: inference-efficiency
+    interval: 30s
+    rules:
+      - record: vllm:tokens_per_joule
+        expr: >-
+          sum(rate(vllm:generation_tokens_total[5m]))
+          / on () clamp_min(sum(DCGM_FI_DEV_POWER_USAGE), 1)
+      - record: vllm:mean_phase_seconds
+        expr: >-
+          label_replace(sum(rate(vllm:request_queue_time_seconds_sum[5m])) / sum(rate(vllm:request_queue_time_seconds_count[5m])), "phase", "queue", "", "")
+          or label_replace(sum(rate(vllm:request_prefill_time_seconds_sum[5m])) / sum(rate(vllm:request_prefill_time_seconds_count[5m])), "phase", "prefill", "", "")
+          or label_replace(sum(rate(vllm:request_decode_time_seconds_sum[5m])) / sum(rate(vllm:request_decode_time_seconds_count[5m])), "phase", "decode", "", "")
+      - record: vllm:prefix_cache_hit_ratio
+        expr: >-
+          sum(rate(vllm:prefix_cache_hits_total[5m]))
+          / clamp_min(sum(rate(vllm:prefix_cache_queries_total[5m])), 1)
+
+  - name: cold-start
+    interval: 30s
+    rules:
+      # Seconds from pod creation to Ready for model-serving pods. Image pull,
+      # weight download/load and CUDA graph capture all sit inside this number;
+      # the per-phase breakdown is in the Kubernetes events and vLLM logs (Loki).
+      - record: ocr:model_pod_time_to_ready_seconds
+        expr: >-
+          max by (namespace, pod) (kube_pod_status_ready_time{pod=~".*(predictor|kserve|vllm|mock-llm|llm).*"})
+          - max by (namespace, pod) (kube_pod_created{pod=~".*(predictor|kserve|vllm|mock-llm|llm).*"})
