@@ -244,13 +244,82 @@
       }
     },
     {
-      "type": "row",
-      "title": "Engine phases (self-hosted only)",
+      "type": "timeseries",
+      "title": "API CPU vs its limit",
+      "description": "From the collector's kubeletstats receiver. Image resize and base64 are CPU work: near 100% the API is throttled and the preprocess stage grows.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (k8s_pod_name) (k8s_container_cpu_limit_utilization_ratio{k8s_container_name=\"api\"})",
+          "legendFormat": "{{k8s_pod_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.9
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "id": 7,
-      "collapsed": false,
       "gridPos": {
         "x": 0,
         "y": 20,
+        "w": 24,
+        "h": 6
+      }
+    },
+    {
+      "type": "row",
+      "title": "Engine phases (self-hosted only)",
+      "id": 8,
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 26,
         "w": 24,
         "h": 1
       },
@@ -300,10 +369,10 @@
           "sort": "desc"
         }
       },
-      "id": 8,
+      "id": 9,
       "gridPos": {
         "x": 0,
-        "y": 21,
+        "y": 27,
         "w": 12,
         "h": 8
       }
@@ -361,10 +430,10 @@
           "sort": "desc"
         }
       },
-      "id": 9,
+      "id": 10,
       "gridPos": {
         "x": 12,
-        "y": 21,
+        "y": 27,
         "w": 12,
         "h": 8
       }
@@ -372,11 +441,11 @@
     {
       "type": "row",
       "title": "Logs (click a trace_id to jump to the trace)",
-      "id": 10,
+      "id": 11,
       "collapsed": false,
       "gridPos": {
         "x": 0,
-        "y": 29,
+        "y": 35,
         "w": 24,
         "h": 1
       },
@@ -406,10 +475,10 @@
         "enableLogDetails": true,
         "sortOrder": "Descending"
       },
-      "id": 11,
+      "id": 12,
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 36,
         "w": 24,
         "h": 10
       }

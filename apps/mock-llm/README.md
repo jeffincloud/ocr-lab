@@ -23,4 +23,13 @@ with a real model.
 | `MOCK_MRZ_ERROR_RATE` | 0.01 | Chance to corrupt MRZ line 2 (fails check digits) |
 | `MOCK_JSON_ERROR_RATE` | 0.005 | Chance to return truncated JSON |
 
-Deployed by `charts/mock-model`.
+| `PORT` | 8080 | Listen port (8000 inside an LLMInferenceService) |
+| `SSL_CERTFILE` / `SSL_KEYFILE` | unset | Serve HTTPS, as vLLM does with KServe's self-signed certificate |
+
+Deployed two ways:
+
+- by `charts/model-llmd` with `values-mock.yaml`: KServe's LLMInferenceService runs it in place of
+  vLLM (port 8000, TLS, non-root, no model download), so the Envoy Gateway → llm-d EPP → replica
+  path is real and only the engine is fake. It exports `vllm:cache_config_info` and zero-valued
+  gauges from start-up because the EPP reads them, and accepts KServe's `/<ns>/<name>/v1/...` paths;
+- by `charts/mock-model` as a plain Deployment (no KServe), or by `observability/local/compose.yaml`.

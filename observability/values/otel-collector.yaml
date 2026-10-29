@@ -1,13 +1,18 @@
-# OpenTelemetry Collector (contrib) as a DaemonSet: OTLP gateway for the apps
-# plus pod logs and Kubernetes events. Its pipeline lives in
-# charts/observability/files/collector/{base,k8s}.yaml, rendered into the
-# ConfigMap "ocr-otel-collector" by the ocr-observability chart.
+# OpenTelemetry Collector (contrib) as a DaemonSet, and the lab's only
+# telemetry agent: OTLP gateway for the apps, scraper for Prometheus-format
+# endpoints on its node (vLLM, EPP, Envoy, DCGM, kube-state-metrics), kubelet
+# stats, pod logs and Kubernetes events. Its pipeline lives in
+# charts/observability/files/collector/{base,k8s}.yaml plus a scrape config
+# generated from charts/observability values, all in the ConfigMap
+# "ocr-otel-collector" rendered by the ocr-observability chart.
+# Single-node lab: on several nodes, move kube-state-metrics and events to a
+# one-replica collector so they aren't collected once per node.
 mode: daemonset
 image:
   repository: otel/opentelemetry-collector-contrib
 command:
   name: otelcol-contrib
-  extraArgs: ["--config=/conf-k8s/k8s.yaml"]
+  extraArgs: ["--config=/conf-k8s/k8s.yaml", "--config=/conf-k8s/scrape.yaml"]
 configMap:
   create: false
   existingName: ocr-otel-collector
@@ -15,7 +20,9 @@ extraVolumes:
   - name: k8s-overlay
     configMap:
       name: ocr-otel-collector
-      items: [{key: k8s, path: k8s.yaml}]
+      items:
+        - {key: k8s, path: k8s.yaml}
+        - {key: scrape, path: scrape.yaml}
 extraVolumeMounts:
   - name: k8s-overlay
     mountPath: /conf-k8s
@@ -24,12 +31,23 @@ presets:
   logsCollection: {enabled: true}
   kubernetesAttributes: {enabled: true}
   kubernetesEvents: {enabled: true}
+  kubeletMetrics: {enabled: true}
+clusterRole:
+  rules:
+    # The llm-d EPP authorizes /metrics scrapes with the caller's token.
+    - nonResourceURLs: ["/metrics"]
+      verbs: ["get"]
+    # kubeletstats reads the kubelet's /pods for container limits
+    # (fine-grained kubelet authz, Kubernetes >= 1.33; older versions want nodes/proxy).
+    - apiGroups: [""]
+      resources: ["nodes/pods"]
+      verbs: ["get"]
 service:
   enabled: true
 ports:
   otlp: {enabled: true}
   otlp-http: {enabled: true}
-  metrics: {enabled: true, containerPort: 8888, servicePort: 8888, protocol: TCP}
+  metrics: {enabled: false}
   jaeger-compact: {enabled: false}
   jaeger-thrift: {enabled: false}
   jaeger-grpc: {enabled: false}
@@ -41,7 +59,7 @@ extraEnvs:
   - {name: PROMETHEUS_OTLP_ENDPOINT, value: http://kps-prometheus.monitoring.svc:9090/api/v1/otlp/v1/metrics}
   - {name: LOKI_OTLP_ENDPOINT, value: http://loki-gateway.monitoring.svc/otlp}
   # Pod-log namespaces to tail (brace glob).
-  - {name: LOG_NAMESPACES_GLOB, value: "{default,kserve,llm-d,envoy-gateway-system}"}
+  - {name: LOG_NAMESPACES_GLOB, value: "{default,kserve,envoy-gateway-system}"}
 resources:
   requests: {cpu: 100m, memory: 256Mi}
   limits: {memory: 1Gi}

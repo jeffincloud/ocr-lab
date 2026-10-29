@@ -5,8 +5,9 @@
 #
 #   1. SSH-bootstraps K3s + nvidia-container-toolkit on the VM
 #   2. Pulls the kubeconfig back to the operator's machine
-#   3. Installs cluster deps (NVIDIA Device Plugin, cert-manager, KServe)
-#   4. Helm-installs the model, api, and frontend charts
+#   3. Installs the platform: NVIDIA device plugin, KServe v0.21 with llm-d,
+#      Envoy Gateway, and the observability stack (scripts/lab-up.sh PROFILE=gpu)
+#   4. Helm-installs the model (LLMInferenceService), api and frontend charts
 #
 # Re-runnable. Skips steps that are already done.
 #
@@ -20,8 +21,9 @@
 #   API_IMAGE       default: ghcr.io/REPLACE_ME/ocr-lab-api:0.1.0
 #   FRONTEND_IMAGE  default: ghcr.io/REPLACE_ME/ocr-lab-frontend:0.1.0
 #   SKIP_BOOTSTRAP  set to skip the remote bootstrap step
-#   SKIP_DEPS       set to skip the cluster-deps install
-#   SKIP_APPS       set to skip the helm app installs
+#   SKIP_DEPS       set to skip the platform install (KServe/llm-d)
+#   SKIP_APPS       legacy path only: skip the helm app installs
+#   LEGACY          set for the original KServe v0.14 InferenceService path
 
 set -euo pipefail
 
@@ -68,6 +70,17 @@ export KUBECONFIG="$KUBECONFIG_OUT"
 
 log "Cluster reachable as:"
 kubectl get nodes -o wide
+
+# --- 3+4. Platform, observability and apps ----------------------------------
+# KServe + llm-d + Gateway API, the OTel-first monitoring stack, Qwen3.5 on
+# vLLM behind the llm-d endpoint picker, the API and the frontend.
+# LEGACY=true keeps the original KServe v0.14 InferenceService + Traefik path
+# (charts/model, Qwen3-VL on vLLM v0.11); bootstrap with K3S_EXTRA_ARGS="" then.
+if [[ -z "${LEGACY:-}" ]]; then
+  PROFILE=gpu API_IMAGE="$API_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" \
+    SKIP_PLATFORM="${SKIP_DEPS:-}" "$REPO_ROOT/scripts/lab-up.sh"
+  exit 0
+fi
 
 # --- 3. Cluster deps --------------------------------------------------------
 if [[ -z "${SKIP_DEPS:-}" ]]; then

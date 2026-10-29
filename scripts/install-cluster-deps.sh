@@ -10,6 +10,7 @@
 # Usage:
 #   KUBECONFIG=~/.kube/ocr-lab.config ./scripts/install-cluster-deps.sh
 #   SKIP_KSERVE=true ...   # device plugin + cert-manager only (llm-d track)
+#   SKIP_KSERVE=true SKIP_CERT_MANAGER=true ...   # device plugin only (scripts/lab-up.sh)
 
 set -euo pipefail
 
@@ -80,6 +81,11 @@ done
 kubectl get node -o jsonpath='{.items[0].status.allocatable}' | python3 -m json.tool || true
 
 # 2. cert-manager -------------------------------------------------------------
+# SKIP_CERT_MANAGER=true when install-llmisvc.sh follows: KServe's quick
+# install brings its own pinned cert-manager.
+if [[ -n "${SKIP_CERT_MANAGER:-}" ]]; then
+  log "SKIP_CERT_MANAGER set — skipping cert-manager."
+else
 log "Installing cert-manager ${CERT_MANAGER_VERSION}..."
 helm repo add jetstack https://charts.jetstack.io >/dev/null 2>&1 || true
 helm repo update jetstack >/dev/null
@@ -88,6 +94,7 @@ helm upgrade --install cert-manager jetstack/cert-manager \
   --version "${CERT_MANAGER_VERSION}" \
   --set crds.enabled=true \
   --wait --timeout 5m
+fi
 
 # 3. KServe -------------------------------------------------------------------
 # SKIP_KSERVE=true when using scripts/install-llmisvc.sh (KServe v0.21 + llm-d) instead.

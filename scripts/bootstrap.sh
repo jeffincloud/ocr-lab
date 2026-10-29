@@ -16,6 +16,11 @@
 
 set -euxo pipefail
 
+# Traefik off by default: Envoy Gateway (installed by install-llmisvc.sh)
+# takes ports 80/443 and serves both the app and the model (Gateway API).
+# K3S_EXTRA_ARGS="" keeps Traefik for the original Ingress setup.
+K3S_EXTRA_ARGS="${K3S_EXTRA_ARGS---disable=traefik}"
+
 # 1. Resolve public IP
 PUBLIC_IP="${PUBLIC_IP:-$(curl -fsS https://api.ipify.org)}"
 echo "Using PUBLIC_IP=$PUBLIC_IP"
@@ -47,7 +52,7 @@ apt-mark hold linux-image-generic linux-headers-generic linux-generic \
 
 # 5. K3s
 curl -sfL https://get.k3s.io \
-  | INSTALL_K3S_EXEC="server --write-kubeconfig-mode=644 --tls-san=${PUBLIC_IP}" sh -
+  | INSTALL_K3S_EXEC="server --write-kubeconfig-mode=644 --tls-san=${PUBLIC_IP} ${K3S_EXTRA_ARGS}" sh -
 
 # 6. Wait for Ready
 echo "Waiting for K3s node to be Ready..."

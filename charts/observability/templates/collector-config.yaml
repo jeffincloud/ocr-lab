@@ -1,5 +1,5 @@
 # Mounted by the OpenTelemetry Collector chart (configMap.existingName). The
-# collector runs with --config relay.yaml --config k8s.yaml.
+# collector runs with --config relay --config k8s --config scrape.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -11,3 +11,62 @@ data:
     {{- .Files.Get "files/collector/base.yaml" | nindent 4 }}
   k8s: |
     {{- .Files.Get "files/collector/k8s.yaml" | nindent 4 }}
+  # Prometheus-format endpoints, scraped by the collector on its own node and
+  # forwarded as OTLP (generated from .Values.scrape).
+  scrape: |
+    receivers:
+      prometheus/k8s:
+        config:
+          scrape_configs:
+          {{- range $name, $t := .Values.scrape }}
+          {{- if $t.enabled }}
+            - job_name: {{ $name | kebabcase }}
+              scrape_interval: {{ $t.interval | default "10s" }}
+              metrics_path: {{ $t.path | default "/metrics" }}
+              scheme: {{ $t.scheme | default "http" }}
+              {{- if $t.honorLabels }}
+              honor_labels: true
+              {{- end }}
+              {{- if eq ($t.scheme | default "http") "https" }}
+              tls_config:
+                insecure_skip_verify: true
+              {{- end }}
+              {{- if $t.bearerToken }}
+              authorization:
+                credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              {{- end }}
+              kubernetes_sd_configs:
+                - role: pod
+                  namespaces:
+                    names: [{{ $t.namespace | quote }}]
+                  selectors:
+                    - role: pod
+                      field: spec.nodeName=${env:K8S_NODE_NAME}
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_pod_phase]
+                  regex: Running
+                  action: keep
+                - source_labels: [__meta_kubernetes_pod_container_port_number]
+                  regex: {{ $t.port | quote }}
+                  action: keep
+                {{- range $k, $v := $t.labels }}
+                - source_labels: [__meta_kubernetes_pod_label_{{ regexReplaceAll "[^a-zA-Z0-9_]" $k "_" }}]
+                  regex: {{ $v | quote }}
+                  action: keep
+                {{- end }}
+                - source_labels: [__meta_kubernetes_namespace]
+                  target_label: namespace
+                - source_labels: [__meta_kubernetes_pod_name]
+                  target_label: pod
+              metric_relabel_configs:
+                # prometheus_client's *_created series double the count for nothing.
+                - source_labels: [__name__]
+                  regex: ".*_created"
+                  action: drop
+                {{- with $t.keep }}
+                - source_labels: [__name__]
+                  regex: {{ . | quote }}
+                  action: keep
+                {{- end }}
+          {{- end }}
+          {{- end }}

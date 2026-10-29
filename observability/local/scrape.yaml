@@ -1,0 +1,28 @@
+# Local counterpart of the generated scrape config in Kubernetes: the
+# collector scrapes the Prometheus-format endpoints and forwards OTLP.
+receivers:
+  prometheus/local:
+    config:
+      scrape_configs:
+        - job_name: vllm
+          scrape_interval: 10s
+          static_configs:
+            - targets: ["mock-llm:8080"]
+              labels: {engine: mock, pod: mock-llm}
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: ".*_created"
+              action: drop
+        - job_name: tempo
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["tempo:3200"]
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: "tempo_(distributor|ingester|metrics_generator)_.*"
+              action: keep
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp, prometheus/local]

@@ -1,13 +1,23 @@
+{{- $mock := eq .Values.mode "mock" }}
+{{- $scheme := ternary "HTTPS" "HTTP" .Values.tls }}
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceService
 metadata:
   name: {{ .Values.model.name }}
   namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: ocr-model
+    ocr-lab/mode: {{ .Values.mode }}
 spec:
   model:
     uri: {{ .Values.model.uri }}
     name: {{ .Values.model.name }}
   replicas: {{ .Values.replicas }}
+  {{- if $mock }}
+  # The mock needs no weights; skip the download init container.
+  storageInitializer:
+    enabled: false
+  {{- end }}
   router:
     # llm-d inference scheduler (endpoint picker) with KServe's default
     # scorers: queue depth, KV-cache utilization, prefix-cache affinity.
@@ -21,25 +31,50 @@ spec:
     samplerArg: {{ .Values.tracing.samplerArg | quote }}
   {{- end }}
   template:
+    {{- if not $mock }}
     {{- with .Values.runtimeClassName }}
     runtimeClassName: {{ . }}
     {{- end }}
+    {{- end }}
     containers:
       - name: main
-        {{- with .Values.image }}
-        image: {{ . }}
-        {{- end }}
+        {{- if $mock }}
+        image: {{ .Values.mock.image }}
+        imagePullPolicy: {{ .Values.mock.imagePullPolicy }}
+        # Replace KServe's "vllm serve" wrapper. Extra args KServe appends
+        # (tracing flags) land in $@ and are ignored.
+        command: ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log ${SSL_CERTFILE:+--ssl-certfile $SSL_CERTFILE --ssl-keyfile $SSL_KEYFILE}", "--"]
+        env:
+          - {name: MOCK_MODEL_NAME, value: {{ .Values.model.name | quote }}}
+          {{- if .Values.tls }}
+          - {name: SSL_CERTFILE, value: /var/run/kserve/tls/tls.crt}
+          - {name: SSL_KEYFILE, value: /var/run/kserve/tls/tls.key}
+          {{- end }}
+          {{- if .Values.tracing.enabled }}
+          - {name: OTEL_SERVICE_NAME, value: {{ .Values.tracing.serviceName | quote }}}
+          {{- end }}
+          {{- range $k, $v := .Values.mock.env }}
+          - {name: {{ $k }}, value: {{ $v | quote }}}
+          {{- end }}
+        resources:
+          {{- toYaml .Values.mock.resources | nindent 10 }}
+        {{- else }}
+        image: {{ .Values.image }}
         env:
           - name: VLLM_ADDITIONAL_ARGS
             value: {{ .Values.vllmArgs | quote }}
+          {{- if .Values.tracing.enabled }}
+          - {name: OTEL_SERVICE_NAME, value: {{ .Values.tracing.serviceName | quote }}}
+          {{- end }}
         resources:
           {{- toYaml .Values.resources | nindent 10 }}
+        {{- end }}
         # Model download + load + CUDA graph capture can take minutes on a
         # cold node; don't let the liveness probe kill a pod that is loading.
         startupProbe:
           httpGet:
             path: /health
             port: 8000
-            scheme: {{ if .Values.tls }}HTTPS{{ else }}HTTP{{ end }}
+            scheme: {{ $scheme }}
           periodSeconds: 10
           failureThreshold: 90

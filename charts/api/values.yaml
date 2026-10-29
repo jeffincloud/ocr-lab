@@ -12,8 +12,16 @@ service:
 # Env passed to the FastAPI container. Anything here is exposed verbatim.
 env:
   OCR_BACKEND: "openai"
-  OPENAI_BASE_URL: "http://qwen3-vl-4b-predictor.default.svc.cluster.local"
-  OPENAI_MODEL_NAME: "qwen3-vl-4b"
+  # The LLMInferenceService route on the Gateway (charts/model-llmd):
+  #   kubectl get llmisvc qwen3-5-9b -o jsonpath='{.status.url}'
+  # scripts/lab-up.sh sets this for you.
+  OPENAI_BASE_URL: "http://REPLACE_WITH_LLMISVC_URL"
+  OPENAI_MODEL_NAME: "qwen3-5-9b"
+  # Engine-specific request fields. Qwen3.5 thinks by default; extraction doesn't need it.
+  # Set to "" for a hosted API that rejects unknown fields.
+  OPENAI_EXTRA_BODY: '{"chat_template_kwargs": {"enable_thinking": false}}'
+  # KServe's gateway route uses a self-signed certificate.
+  OPENAI_TLS_VERIFY: "false"
   OPENAI_TIMEOUT: "60"
   # Stream responses so the API can time the first token (client-side TTFT).
   OPENAI_STREAM: "true"

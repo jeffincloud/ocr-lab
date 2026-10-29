@@ -1,10 +1,12 @@
 # kube-prometheus-stack for the OCR lab (single node). Release name: kps, namespace: monitoring.
 fullnameOverride: kps
 
-# Prometheus takes OTLP metrics from the collector (with exemplars) and
-# remote-write from Tempo's metrics generator, scrapes vLLM/DCGM via
-# PodMonitors/ServiceMonitors, and evaluates the SLO/cost rules from
-# charts/observability.
+# Used for storage and rules only. Prometheus takes OTLP metrics from the
+# collector (with exemplars) and remote-write from Tempo's metrics generator,
+# and evaluates the SLO/cost rules from charts/observability. It scrapes
+# nothing: the OpenTelemetry Collector collects every metric (including the
+# Prometheus-format ones) and pushes OTLP. So the chart's exporters and
+# ServiceMonitors are off; kube-state-metrics stays, scraped by the collector.
 
 prometheus:
   prometheusSpec:
@@ -21,25 +23,61 @@ prometheus:
         - deployment.environment.name
         - k8s.namespace.name
         - k8s.pod.name
-    # Pick up PodMonitors/rules from every release, not just this chart's.
+        - k8s.container.name
+      # Keep OTel names readable in PromQL (ocr_extract_duration_seconds).
+      translationStrategy: UnderscoreEscapingWithSuffixes
+    # Pick up rules from every release, not just this chart's.
     ruleSelectorNilUsesHelmValues: false
-    serviceMonitorSelectorNilUsesHelmValues: false
-    podMonitorSelectorNilUsesHelmValues: false
-    probeSelectorNilUsesHelmValues: false
     resources:
       requests: {cpu: 200m, memory: 1Gi}
       limits: {memory: 3Gi}
+  serviceMonitor:
+    selfMonitor: false
 
 alertmanager:
   enabled: true
+  serviceMonitor:
+    selfMonitor: false
+
+# The default rules alert on node-exporter/kubelet series that no longer exist here.
+defaultRules:
+  create: false
+
+# Nothing for Prometheus to scrape: the collector covers these (kubeletstats
+# for pod/container resources, prometheus receiver for the rest).
+nodeExporter:
+  enabled: false
+kubelet:
+  enabled: false
+kubeApiServer:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+coreDns:
+  enabled: false
+prometheusOperator:
+  serviceMonitor:
+    selfMonitor: false
 
 kube-state-metrics:
   # kube_pod_status_ready_time / kube_pod_created feed the cold-start rules.
+  # Scraped by the collector (charts/observability scrape.kubeStateMetrics).
+  prometheus:
+    monitor:
+      enabled: false
   metricLabelsAllowlist:
-    - pods=[app.kubernetes.io/name,serving.kserve.io/inferenceservice,app.kubernetes.io/component]
+    - pods=[app.kubernetes.io/name,app.kubernetes.io/component,kserve.io/component]
 
 grafana:
   adminPassword: change-me-ocr-lab
+  serviceMonitor:
+    enabled: false
   sidecar:
     dashboards:
       enabled: true

@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 # Install the OCR lab's observability stack into the cluster (namespace: monitoring).
 #
-#   1. kube-prometheus-stack  Prometheus (OTLP receiver + exemplars), Alertmanager, Grafana, node-exporter, kube-state-metrics
+#   1. kube-prometheus-stack  Prometheus as an OTLP store (exemplars, rules; scrapes nothing), Alertmanager, Grafana, kube-state-metrics
 #   2. Loki                   logs (OTLP), single binary
 #   3. Tempo                  traces (OTLP), span metrics + service graph -> Prometheus
-#   4. ocr-observability      collector config, PodMonitors, SLO/cost rules, dashboards (charts/observability)
-#   5. OTel Collector         DaemonSet: OTLP gateway + pod logs + Kubernetes events, PII + cardinality guards
+#   4. ocr-observability      collector config + scrape targets, SLO/cost rules, dashboards (charts/observability)
+#   5. OTel Collector         DaemonSet, the only agent: OTLP gateway, scrapes vLLM/EPP/Envoy/DCGM/KSM,
+#                             kubelet stats, pod logs, Kubernetes events; PII + cardinality guards
 #   6. DCGM exporter          GPU metrics (skipped with GPU=false)
 #
 # Idempotent. Run with KUBECONFIG pointing at the lab cluster:
 #   KUBECONFIG=~/.kube/ocr-lab.config ./observability/install.sh
 #   GPU=false ./observability/install.sh          # no GPU node yet (mock model)
-#   SCRAPE="--set scrape.llmisvcVllm.enabled=true --set scrape.llmdScheduler.enabled=true" ./observability/install.sh
+#   SCRAPE="--set scrape.mockLlm.enabled=true" ./observability/install.sh   # extra scrape targets
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -55,7 +56,7 @@ log "3/6 Tempo ${TEMPO_VERSION}"
 helm upgrade --install tempo grafana-community/tempo -n "$NS" \
   --version "$TEMPO_VERSION" -f "$V/tempo.yaml" --wait --timeout 10m
 
-log "4/6 ocr-observability (collector config, scrape targets, rules, dashboards)"
+log "4/6 ocr-observability (collector config + scrape targets, rules, dashboards)"
 # shellcheck disable=SC2086
 helm upgrade --install ocr-observability "$REPO_ROOT/charts/observability" -n "$NS" $SCRAPE
 

@@ -1,31 +1,55 @@
 # Observability for the OCR lab
 
 Telemetry for the four layers of an LLM inference app (hardware, network, application, inference),
-built from CNCF/OSS parts and wired so you can move between metrics, traces and logs without copying IDs.
+built from CNCF/OSS parts, collected through OpenTelemetry only, and wired so you can move between
+metrics, traces and logs without copying IDs.
 
 ```
- k6 / browser ──► nginx ──► ocr-api ─────────────► model server ──► GPU
-  traceparent     X-Request-ID  OTel SDK: traces,    vLLM (or llm-d EPP + vLLM,   DCGM exporter
-                  timed logs    metrics+exemplars,   or apps/mock-llm)
-                                logs w/ trace_id     /metrics + OTLP spans
-                         │                                 │                       │
-                         ▼ OTLP                            ▼                       ▼
-                  ┌───────────────────────── OTel Collector ───────┐      Prometheus scrape
-                  │ PII: fail-closed span attrs, value scrubbing   │
-                  │ cardinality guard · tail sampling · k8s attrs  │
-                  └──────┬───────────────┬──────────────┬──────────┘
-                         ▼               ▼              ▼
-                     Tempo           Prometheus        Loki
-              (span metrics,     (OTLP + exemplars,  (OTLP, trace_id as
-               service graph)     SLO/cost rules)     structured metadata)
-                         └──────────── Grafana ─────────┘
+ k6 / browser ─► Envoy Gateway ─► nginx ─► ocr-api ─► Envoy ─► llm-d EPP ─► vLLM ─► GPU
+                  /stats           timed    OTel SDK:           picks a      /metrics   DCGM
+                                   logs     traces, metrics     replica      + OTLP     exporter
+                                            + exemplars, logs   /metrics,    spans
+                                                                OTLP spans
+      │ OTLP (push)          │ Prometheus format (pulled by the collector)    │ pod logs, k8s events, kubelet stats
+      ▼                      ▼                                                ▼
+   ┌──────────────────────────── OpenTelemetry Collector (DaemonSet) ───────────────────────────┐
+   │ receivers: otlp · prometheus (vLLM, EPP, Envoy, DCGM, kube-state-metrics) · kubeletstats  │
+   │            filelog (pods) · k8sobjects (events)                                            │
+   │ PII: fail-closed span attrs, value scrubbing · cardinality guard · tail sampling · k8s attrs│
+   └──────┬──────────────────────────┬────────────────────────────────┬────────────────────────┘
+          ▼ OTLP                     ▼ OTLP                           ▼ OTLP
+        Tempo                    Prometheus                          Loki
+   (span metrics,           (OTLP store: exemplars,            (trace_id as
+    service graph)           SLO/cost rules; scrapes nothing)   structured metadata)
+          └──────────────────────────── Grafana ─────────────────────────┘
 ```
+
+## OTel-first collection
+
+The collector is the only agent and every signal reaches a backend as OTLP:
+
+- **Pushed over OTLP** by the code that produces it: the API (traces, metrics with exemplars,
+  logs), vLLM and the llm-d EPP (traces, via the LLMInferenceService `tracing` block), the mock,
+  and the collector's own metrics.
+- **Pulled by the collector** and converted to OTLP where a component only speaks Prometheus
+  format: vLLM, the EPP, Envoy, DCGM and kube-state-metrics (`charts/observability` `scrape:`
+  values → a `prometheus` receiver with node-local pod discovery). Metric names survive the trip
+  unchanged (`vllm:time_to_first_token_seconds`), so dashboards work against either path.
+- **Read from the node**: `kubeletstats` (pod/container CPU, memory, limit utilization; replaces
+  cAdvisor), `filelog` (pod logs, named by `app.kubernetes.io/name`), `k8sobjects` (events, as
+  `service_name="k8s-events"`).
+
+Prometheus only stores and evaluates rules: no ServiceMonitors, PodMonitors or node-exporter. The
+benefit is one pipeline, so the PII, cardinality and sampling rules apply to every signal no
+matter where it came from. The cost: the collector is a single point of failure for telemetry,
+so its own metrics (`otelcol_*`) are pushed straight to Prometheus and alerted on.
+kube-state-metrics stays because no OTel receiver gives pod creation→Ready timestamps.
 
 | Path | What |
 |---|---|
 | `local/compose.yaml` | Everything on a laptop with the mock model. No GPU, no Kubernetes. |
 | `install.sh`, `values/` | The same stack on the lab cluster (kube-prometheus-stack, Loki, Tempo, Collector, DCGM). |
-| `../charts/observability/` | Collector pipeline, PodMonitors, SLO/cost/cold-start rules, dashboards. Shared by both. |
+| `../charts/observability/` | Collector pipeline and scrape targets, SLO/cost/cold-start rules, dashboards. Shared by both. |
 | `slo/slos.yaml` → `slo/generate.py` | SLOs as code → Prometheus recording rules and burn-rate alerts. |
 | `dashboards/build.py` | Dashboards as code → Grafana JSON. |
 | `../tools/pii-probe/probe.py` | Sends deliberately leaky telemetry to prove the PII policy works. |
@@ -44,10 +68,12 @@ recordings and test rules; take every number for the talk from the GPU instance.
 
 ## Run it on the cluster
 
+`scripts/lab-up.sh` installs all of it (PROFILE=local on kind with the mock, PROFILE=gpu on the
+GPU node). By hand:
+
 ```bash
-KUBECONFIG=~/.kube/ocr-lab.config ./observability/install.sh          # GPU=false before the GPU exists
-helm upgrade --install ocr-api charts/api --set image.repository=...   # API already points at the collector
-helm upgrade --install model charts/model --set tracing.enabled=true --set runtime.image=<vllm-otel image>
+KUBECONFIG=~/.kube/ocr-lab.config ./observability/install.sh          # GPU=false skips DCGM
+helm upgrade --install model charts/model-llmd                           # tracing on by default
 ```
 
 ## Context correlation
@@ -58,7 +84,7 @@ helm upgrade --install model charts/model --set tracing.enabled=true --set runti
 | Trace | Its logs | Tempo → Loki on `trace_id` (Loki keeps it as structured metadata on OTLP logs). |
 | Log line | Its trace | Loki derived field on `trace_id` (OTLP metadata or the JSON stdout line). |
 | Trace | Engine/GPU state at that moment | Tempo "traces to metrics": queue p95, KV cache, SM active for the span's time window. |
-| API span | vLLM span | W3C `traceparent` propagated by the httpx instrumentation; vLLM continues the trace when started with `--otlp-traces-endpoint`. Under llm-d, the EPP's scheduling spans sit in between. |
+| API span | EPP and vLLM spans | W3C `traceparent` propagated by the httpx instrumentation; KServe turns on `--otlp-traces-endpoint` for vLLM and tracing for the EPP, whose scheduling spans (filters, scorers, pick) sit between the API call and `llm_request`. |
 | Edge | API | nginx forwards `traceparent` and sets `X-Request-ID`, logged by both. |
 
 Tail sampling and exemplars interact: an exemplar whose trace was dropped is a dead link. The lab

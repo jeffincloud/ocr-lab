@@ -1,6 +1,6 @@
 apiVersion: v2
 name: ocr-model
-description: KServe InferenceService serving Qwen3-VL via vLLM for passport OCR
+description: "Legacy (talk v1): KServe v0.14 InferenceService serving Qwen3-VL-4B on vLLM v0.11. The lab now uses charts/model-llmd."
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

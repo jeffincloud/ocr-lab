@@ -77,3 +77,33 @@ groups:
         expr: >-
           max by (namespace, pod) (kube_pod_status_ready_time{pod=~".*(predictor|kserve|vllm|mock-llm|llm).*"})
           - max by (namespace, pod) (kube_pod_created{pod=~".*(predictor|kserve|vllm|mock-llm|llm).*"})
+
+  # The collector is the only path for telemetry; watch it from outside its
+  # pipelines (its own metrics go to Prometheus over a separate OTLP exporter).
+  - name: telemetry-pipeline
+    rules:
+      - alert: TelemetryExportFailing
+        expr: >-
+          sum by (exporter) (rate(otelcol_exporter_send_failed_metric_points_total[5m])
+            or rate(otelcol_exporter_send_failed_spans_total[5m])
+            or rate(otelcol_exporter_send_failed_log_records_total[5m])) > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "OTel Collector exporter {{ $labels.exporter }} is failing to send"
+      - alert: TelemetryRefusedByCollector
+        expr: >-
+          sum by (receiver) (rate(otelcol_receiver_refused_metric_points_total[5m])
+            or rate(otelcol_receiver_refused_spans_total[5m])
+            or rate(otelcol_receiver_refused_log_records_total[5m])) > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: "OTel Collector receiver {{ $labels.receiver }} is refusing data (memory limiter or bad input)"
+      - alert: EngineMetricsMissing
+        # Scraped targets report up=0 through the collector like Prometheus would.
+        expr: max by (job, pod) (up{job=~"vllm|epp"}) == 0
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "Collector cannot scrape {{ $labels.job }} on {{ $labels.pod }}"

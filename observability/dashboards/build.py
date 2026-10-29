@@ -221,6 +221,12 @@ def journey_board():
         desc="Client-side numbers are all a closed API gives you. The gap between client and engine lines is "
              "network + HTTP + gateway."), 12, 8)
 
+    b.add(ts("API CPU vs its limit", [
+        ('max by (k8s_pod_name) (k8s_container_cpu_limit_utilization_ratio{k8s_container_name="api"})', "{{k8s_pod_name}}")],
+        "percentunit", max_=1, thresholds=[{"color": "transparent", "value": None}, {"color": BAD, "value": 0.9}],
+        desc="From the collector's kubeletstats receiver. Image resize and base64 are CPU work: near 100% the API "
+             "is throttled and the preprocess stage grows."), 24, 6)
+
     b.row("Engine phases (self-hosted only)")
     b.add(ts("Mean phase time per request", [("vllm:mean_phase_seconds", "{{phase}}")], "s", stack=True,
              desc="queue (waiting for a batch slot), prefill (image + prompt tokens), decode (JSON output)."), 12, 8)
@@ -248,7 +254,7 @@ def engine_board():
     b.add(heatmap("Queue time distribution", "sum by (le) (rate(vllm:request_queue_time_seconds_bucket[$__rate_interval]))",
                   desc="When this climbs, requests wait for a batch slot: the engine is saturated."), 12, 8)
     b.add(heatmap("Prompt tokens per request", "sum by (le) (rate(vllm:request_prompt_tokens_bucket[$__rate_interval]))",
-                  unit="short", desc="Image resolution drives this (one token per 32×32 px for Qwen3-VL)."), 12, 8)
+                  unit="short", desc="Image resolution drives this (one token per 32×32 px for Qwen3.5 and Qwen3-VL)."), 12, 8)
 
     b.row("Scheduler and KV cache (USE)")
     b.add(ts("Running vs waiting requests", [("sum(vllm:num_requests_running)", "running"),
@@ -267,6 +273,58 @@ def engine_board():
     b.add(ts("Finished requests by reason", [
         ("sum by (finished_reason) (rate(vllm:request_success_total[$__rate_interval]))", "{{finished_reason}}")],
         "reqps", stack=True, desc="length = hit max_tokens (truncated JSON risk)."), 12, 8)
+    return b
+
+
+# --- 3b. Routing: Gateway + llm-d endpoint picker -----------------------------------------------
+def routing_board():
+    b = Board("ocr-routing", "Routing · Gateway + llm-d",
+              "How requests reach a model replica: the Envoy Gateway (network layer), the llm-d endpoint "
+              "picker (EPP) that chooses the pod from engine state, and whether the replicas end up balanced. "
+              "A closed API hides all of this behind one endpoint.", ["llm-d", "gateway"])
+    b.row("Gateway (Envoy)")
+    b.add(ts("Requests by response class", [
+        ("sum by (envoy_response_code_class) (rate(envoy_http_downstream_rq_xx[$__rate_interval]))", "{{envoy_response_code_class}}xx")],
+        "reqps", stack=True, desc="As the edge sees them, before the API. 5xx here and not in the API means the gateway or EPP failed."), 12, 8)
+    b.add(ts("Gateway latency", [
+        ("histogram_quantile(0.95, sum by (le) (rate(envoy_http_downstream_rq_time_bucket[$__rate_interval]))) / 1000", "p95"),
+        ("histogram_quantile(0.50, sum by (le) (rate(envoy_http_downstream_rq_time_bucket[$__rate_interval]))) / 1000", "p50")],
+        "s", desc="Downstream request time at Envoy, which includes the EPP call and the model."), 12, 8)
+
+    b.row("Endpoint picker (EPP)")
+    b.add(ts("Picks per replica", [
+        ('sum by (endpoint_name) (rate(llm_d_epp_scheduler_attempts_total{status="success"}[$__rate_interval]))', "{{endpoint_name}}")],
+        "reqps", stack=True, desc="Which vLLM pod the scheduler chose. Round-robin would split evenly; the EPP follows queue, KV and prefix-cache state."), 8, 8)
+    b.add(ts("Scheduling latency", [
+        (q("llm_d_epp_scheduler_e2e_duration_seconds_bucket", 0.95), "p95"),
+        (q("llm_d_epp_scheduler_e2e_duration_seconds_bucket", 0.50), "p50")],
+        "s", desc="Time the EPP spends choosing a pod. It sits on every request's critical path."), 8, 8)
+    b.add(ts("Time per scheduler plugin (p95)", [
+        ("histogram_quantile(0.95, sum by (le, plugin_type) (rate(llm_d_epp_plugin_duration_seconds_bucket[$__rate_interval])))", "{{plugin_type}}")],
+        "s", desc="Filters and scorers (queue, KV cache, prefix cache). Traces show the same per request."), 8, 8)
+    b.add(ts("Pool state as the EPP sees it", [
+        ("max(llm_d_epp_average_queue_size)", "avg queue size"),
+        ("max(llm_d_epp_average_kv_cache_utilization)", "avg KV cache"),
+        ("max(llm_d_epp_ready_endpoints)", "ready endpoints")], "short",
+        desc="The EPP polls each replica's /metrics; these are its averages across the InferencePool."), 12, 8)
+    b.add(ts("TTFT seen by the EPP vs by vLLM", [
+        (q("llm_d_epp_request_ttft_seconds_bucket", 0.95), "EPP: TTFT p95"),
+        (q("vllm:time_to_first_token_seconds_bucket", 0.95), "vLLM: TTFT p95")],
+        "s", desc="The router measures first-token time from its side of the pod; the gap to vLLM's own number is "
+                  "proxying and transport inside the cluster."), 12, 8)
+
+    b.row("Are the replicas balanced?")
+    b.add(ts("Waiting requests per replica", [("sum by (pod) (vllm:num_requests_waiting)", "{{pod}}")], "short",
+             desc="A good picker keeps these close. One replica queueing while another idles means routing is off."), 8, 8)
+    b.add(ts("KV cache per replica", [("max by (pod) (vllm:kv_cache_usage_perc)", "{{pod}}")], "percentunit", max_=1), 8, 8)
+    b.add(ts("Image (multimodal) cache hit ratio", [
+        ("sum by (pod) (rate(vllm:mm_cache_hits_total[$__rate_interval])) / clamp_min(sum by (pod) (rate(vllm:mm_cache_queries_total[$__rate_interval])), 1e-9)", "{{pod}}")],
+        "percentunit", max_=1, desc="Re-sent images skip the vision encoder when they land on the pod that saw them."), 8, 8)
+
+    b.row("Scheduling traces")
+    b.add({"type": "table", "title": "Recent EPP scheduling spans (click to open the trace)", "datasource": TEMPO,
+           "targets": [{"datasource": TEMPO, "queryType": "traceql", "limit": 20, "refId": "A",
+                        "query": '{resource.service.name="inference-scheduler"}'}]}, 24, 8)
     return b
 
 
@@ -312,7 +370,7 @@ def coldstart_board():
     b.add(ts("Time to Ready per model pod", [("ocr:model_pod_time_to_ready_seconds", "{{pod}}")], "s", bars=True), 18, 6)
     b.row("What happened during start-up")
     b.add(logs("Kubernetes events for model pods",
-               '{service_name=~".+"} |= "Pulling" or "Pulled" or "Scheduled" or "Started" or "Unhealthy" or "BackOff"',
+               '{service_name="k8s-events"} |= "Pulling" or "Pulled" or "Scheduled" or "Started" or "Unhealthy" or "BackOff"',
                desc="Collected by the OTel Collector's k8sobjects receiver: Scheduled → Pulling → Pulled → Started → probes."), 12, 12)
     b.add(logs("vLLM start-up milestones",
                '{k8s_namespace_name=~".+"} |~ "(?i)(loading weights took|model loading took|graph capturing finished|'
@@ -359,7 +417,7 @@ def cost_board():
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    for build in (slo_board, journey_board, engine_board, gpu_board, coldstart_board, cost_board):
+    for build in (slo_board, journey_board, engine_board, routing_board, gpu_board, coldstart_board, cost_board):
         b = build()
         (OUT / f"{b.uid}.json").write_text(json.dumps(b.json(), indent=2) + "\n")
         print(f"wrote {b.uid}.json ({len(b.panels)} panels)")

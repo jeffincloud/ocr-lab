@@ -309,7 +309,7 @@
     {
       "type": "heatmap",
       "title": "Prompt tokens per request",
-      "description": "Image resolution drives this (one token per 32\u00d732 px for Qwen3-VL).",
+      "description": "Image resolution drives this (one token per 32\u00d732 px for Qwen3.5 and Qwen3-VL).",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"

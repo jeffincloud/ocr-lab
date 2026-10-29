@@ -1,5 +1,8 @@
 # vLLM with the OpenTelemetry packages its tracing needs.
 #
+# Only for the legacy charts/model path (vLLM v0.11). vLLM >= v0.31 (charts/model-llmd)
+# ships these packages, so the upstream image traces as is.
+#
 # vLLM's --otlp-traces-endpoint only works when opentelemetry-sdk and an OTLP
 # exporter are importable; the upstream vllm-openai image doesn't list them as
 # requirements. This adds them without changing anything else.

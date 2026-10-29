@@ -4,7 +4,7 @@ image:
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
-servedName: qwen3-vl-4b
+servedName: qwen3-5-9b
 
 # See apps/mock-llm/README.md. Startup delay simulates model loading so the
 # cold-start dashboard has something to show.

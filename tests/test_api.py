@@ -107,7 +107,7 @@ def test_success_returns_usage_mrz_and_genai_span(client):
     assert body["usage"] == {"input_tokens": 900, "output_tokens": 120}
     assert r.headers["x-request-id"]
     spans = {s.name: s for s in SPANS.get_finished_spans()}
-    chat = spans["chat qwen3-vl-4b"]
+    chat = spans["chat qwen3-5-9b"]
     assert chat.attributes["gen_ai.usage.input_tokens"] == 900
     assert chat.attributes["gen_ai.usage.output_tokens"] == 120
     assert chat.attributes["ocr.upstream.ratelimit.remaining.requests"] == 42
@@ -139,3 +139,17 @@ def test_upstream_failures_map_to_explicit_statuses(client, handler, status, out
 def test_bad_content_type_is_400(client):
     r = client.post("/extract", files={"file": ("p.gif", b"GIF89a", "image/gif")})
     assert r.status_code == 400
+
+
+def test_extra_body_reaches_the_engine(client, monkeypatch):
+    # Qwen3.5 thinks unless told not to; the switch rides in OPENAI_EXTRA_BODY.
+    monkeypatch.setattr(ocr, "OPENAI_EXTRA_BODY", {"chat_template_kwargs": {"enable_thinking": False}})
+    seen = {}
+
+    def capture(request):
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, content=_sse(json.dumps(ANSWER)))
+    _use(capture)
+    assert _post(client).status_code == 200
+    assert seen["chat_template_kwargs"] == {"enable_thinking": False}
+    assert seen["response_format"] == {"type": "json_object"}

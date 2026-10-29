@@ -1,37 +1,61 @@
-# The llm-d track of the lab: same model as charts/model, but served through
-# KServe's LLMInferenceService. KServe creates the vLLM Deployment, an
-# InferencePool, the llm-d endpoint picker (EPP) and an HTTPRoute on the
-# Gateway, so requests are routed by queue depth / KV-cache / prefix-cache
-# state instead of round-robin.
+# The lab's model, served by KServe's LLMInferenceService with the llm-d
+# integration. KServe creates the model-server Deployment, an InferencePool,
+# the llm-d endpoint picker (EPP) and an HTTPRoute on the Gateway, so requests
+# are routed by queue depth, KV-cache use and prefix-cache affinity instead of
+# round-robin.
 #
-# Prereqs: scripts/install-llmisvc.sh (KServe v0.21 + Gateway API + GIE CRDs +
-# Envoy Gateway + LWS). Then point the API at the route:
-#   kubectl get llmisvc qwen3-vl-4b -o jsonpath='{.status.url}'
+# Prereqs: scripts/install-llmisvc.sh (KServe v0.21 + Gateway API + Inference
+# Extension CRDs + Envoy Gateway + LWS). Then point the API at the route:
+#   kubectl get llmisvc qwen3-5-9b -o jsonpath='{.status.url}'
 #
-# NOTE: written against KServe v0.21.0 samples; not yet run on a GPU node.
+# Two modes, same KServe/llm-d objects:
+#   gpu   Qwen3.5-9B (FP8) on vLLM. Default.
+#   mock  apps/mock-llm stands in for vLLM (CPU only, no download), so the
+#         gateway, EPP, routing and telemetry can be exercised on a laptop.
+#         values-mock.yaml sets this up.
+mode: gpu
 
 model:
-  uri: hf://Qwen/Qwen3-VL-4B-Instruct
-  # Served model name; the API sends this as "model".
-  name: qwen3-vl-4b
+  # Qwen3.5-9B with FP8 weights (vision encoder left in BF16): 14 GB on disk,
+  # leaving room for the KV cache on a 24 GB L4. Qwen/Qwen3.5-4B (BF16, ~9 GB)
+  # is the smaller drop-in.
+  uri: hf://RedHatAI/Qwen3.5-9B-FP8-dynamic
+  # Served model name and LLMInferenceService name; the API sends this as "model".
+  name: qwen3-5-9b
 
 replicas: 1
 
-# Image KServe's default template uses is ghcr.io/llm-d/llm-d-cuda (vLLM +
-# llm-d extras). Check its CUDA version against the GPU driver on the node
-# (see the vLLM v0.11 pin story in charts/model/values.yaml). Empty = KServe default.
-image: ""
+# vLLM v0.31.0 is the release llm-d v1.0 ships, and the first KServe template
+# images (llm-d-cuda:v0.9.0) predate Qwen3.5 support (vLLM >= 0.17). Built for
+# CUDA 13.0: the node needs NVIDIA driver >= 580. It also bundles the
+# OpenTelemetry packages, so --otlp-traces-endpoint works without a custom image.
+image: docker.io/vllm/vllm-openai:v0.31.0
 
-# Extra vLLM flags (passed via VLLM_ADDITIONAL_ARGS).
-vllmArgs: "--max-model-len=8192 --gpu-memory-utilization=0.9 --trust-remote-code"
+# Extra vLLM flags (KServe passes them via VLLM_ADDITIONAL_ARGS, through a
+# bash eval: single-quote any JSON).
+#   --default-chat-template-kwargs  Qwen3.5 "thinks" by default; extraction
+#                                   doesn't need it (the API also sends this).
+#   --reasoning-parser qwen3        keeps any thinking out of message.content.
+#   --limit-mm-per-prompt           one image per request, no video.
+#   --max-model-len 16384           ample for one passport image + prompt + JSON;
+#                                   leaves KV cache headroom on 24 GB.
+vllmArgs: >-
+  --max-model-len=16384
+  --gpu-memory-utilization=0.90
+  --reasoning-parser=qwen3
+  --default-chat-template-kwargs='{"enable_thinking":false}'
+  --limit-mm-per-prompt='{"image":1,"video":0}'
+  --enable-prefix-caching
 
-# End-to-end tracing for every component KServe manages (EPP, vLLM).
-# llm-d only honours parentbased_traceidratio; the lab keeps 100% so the
-# collector's tail sampling decides what to keep.
+# End-to-end tracing for every component KServe manages (EPP, vLLM). llm-d
+# only honours parentbased_traceidratio; the lab keeps 100% so the collector's
+# tail sampling decides what to keep.
 tracing:
   enabled: true
   exporterEndpoint: http://otel-collector-opentelemetry-collector.monitoring.svc:4317
   samplerArg: "1.0"
+  # KServe names the vLLM service "inference-server-decode"; the dashboards use "vllm".
+  serviceName: vllm
 
 resources:
   limits: {cpu: "4", memory: 24Gi, nvidia.com/gpu: "1"}
@@ -39,5 +63,19 @@ resources:
 
 runtimeClassName: nvidia
 
-# KServe serves vLLM over TLS (self-signed) when its global EnableTLS is on (default).
+# KServe serves the model server over TLS (self-signed) when its global
+# EnableTLS is on (the default install). Probes and scraping follow this.
 tls: true
+
+# Used when mode=mock.
+mock:
+  image: ocr-lab-mock-llm:dev
+  imagePullPolicy: IfNotPresent
+  env:
+    MOCK_STARTUP_SECONDS: "45"
+    MOCK_MAX_NUM_SEQS: "16"
+    # The mock exports spans over OTLP/HTTP.
+    OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector-opentelemetry-collector.monitoring.svc:4318
+  resources:
+    requests: {cpu: 200m, memory: 256Mi}
+    limits: {cpu: "1", memory: 512Mi}

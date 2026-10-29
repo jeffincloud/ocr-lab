@@ -29,7 +29,8 @@ services:
       <<: *otel-env
       OTEL_SERVICE_NAME: ocr-api
       OPENAI_BASE_URL: http://mock-llm:8080
-      OPENAI_MODEL_NAME: qwen3-vl-4b
+      OPENAI_MODEL_NAME: qwen3-5-9b
+      OPENAI_EXTRA_BODY: '{"chat_template_kwargs": {"enable_thinking": false}}'
       GENAI_PROVIDER_NAME: vllm
     depends_on: [mock-llm, otel-collector]
 
@@ -44,9 +45,10 @@ services:
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.162.0
-    command: ["--config=/etc/otelcol/base.yaml"]
+    command: ["--config=/etc/otelcol/base.yaml", "--config=/etc/otelcol/scrape.yaml"]
     volumes:
       - ../../charts/observability/files/collector/base.yaml:/etc/otelcol/base.yaml:ro
+      - ./scrape.yaml:/etc/otelcol/scrape.yaml:ro
     environment:
       LAB_ENVIRONMENT: local
       TRACE_SAMPLE_PERCENT: "100"

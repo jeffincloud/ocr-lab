@@ -28,7 +28,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from PIL import Image
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 
-MODEL = os.getenv("MOCK_MODEL_NAME", "qwen3-vl-4b")
+MODEL = os.getenv("MOCK_MODEL_NAME", "qwen3-5-9b")
 MAX_NUM_SEQS = int(os.getenv("MOCK_MAX_NUM_SEQS", "16"))
 PREFILL_MS_PER_TOKEN = float(os.getenv("MOCK_PREFILL_MS_PER_TOKEN", "0.35"))
 DECODE_MS_PER_TOKEN = float(os.getenv("MOCK_DECODE_MS_PER_TOKEN", "14"))
@@ -38,7 +38,7 @@ STARTUP_SECONDS = float(os.getenv("MOCK_STARTUP_SECONDS", "0"))
 FIELD_ERROR_RATE = float(os.getenv("MOCK_FIELD_ERROR_RATE", "0.03"))
 MRZ_ERROR_RATE = float(os.getenv("MOCK_MRZ_ERROR_RATE", "0.01"))
 JSON_ERROR_RATE = float(os.getenv("MOCK_JSON_ERROR_RATE", "0.005"))
-PATCH_PX = 32  # Qwen3-VL: 16 px patches merged 2x2 -> one token per 32x32 px
+PATCH_PX = 32  # Qwen3.5 (as Qwen3-VL): 16 px patches merged 2x2 -> one token per 32x32 px
 TEXT_PROMPT_TOKENS = 260
 
 L = ["model_name"]
@@ -60,8 +60,25 @@ m_req_prompt = Histogram("vllm:request_prompt_tokens", "Prompt tokens per reques
                          buckets=[64, 128, 256, 512, 1024, 2048, 4096, 8192])
 m_req_gen = Histogram("vllm:request_generation_tokens", "Generation tokens per request", L,
                       buckets=[16, 32, 64, 128, 256, 512, 1024])
+# The llm-d endpoint picker reads this to size its prefix-cache index.
+Gauge("vllm:cache_config_info", "KV cache config", ["block_size", "num_gpu_blocks"]).labels(
+    "16", str(KV_CAPACITY_TOKENS // 16)).set(1)
 
 app = FastAPI(title="mock-llm")
+
+
+# KServe serves each LLMInferenceService under /<namespace>/<name>/ on the
+# gateway; depending on the version the route may or may not strip it. Accept
+# both, like vLLM does with --root-path.
+@app.middleware("http")
+async def _strip_root_path(request: Request, call_next):
+    path = request.scope["path"]
+    for marker in ("/v1/", "/health", "/metrics"):
+        i = path.find(marker)
+        if i > 0:
+            request.scope["path"] = path[i:]
+            break
+    return await call_next(request)
 _started = time.monotonic()
 _slots = asyncio.Semaphore(MAX_NUM_SEQS)
 _state = {"running": 0, "waiting": 0, "kv_tokens": 0}
@@ -85,6 +102,9 @@ def _set_gauges():
     m_running.labels(MODEL).set(_state["running"])
     m_waiting.labels(MODEL).set(_state["waiting"])
     m_kv.labels(MODEL).set(min(1.0, _state["kv_tokens"] / KV_CAPACITY_TOKENS))
+
+
+_set_gauges()  # export zeros before the first request, as vLLM does
 
 
 def _ready() -> bool:

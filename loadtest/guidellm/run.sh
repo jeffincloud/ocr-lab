@@ -15,7 +15,7 @@
 set -euo pipefail
 
 TARGET="${TARGET:-http://localhost:8080}"
-MODEL="${MODEL:-qwen3-vl-4b}"
+MODEL="${MODEL:-qwen3-5-9b}"
 DATA="${DATA:-loadtest/data/guidellm.jsonl}"
 MODE="${1:-sweep}"
 DURATION="${DURATION:-120}"

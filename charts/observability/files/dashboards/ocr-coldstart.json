@@ -193,7 +193,7 @@
             "type": "loki",
             "uid": "loki"
           },
-          "expr": "{service_name=~\".+\"} |= \"Pulling\" or \"Pulled\" or \"Scheduled\" or \"Started\" or \"Unhealthy\" or \"BackOff\"",
+          "expr": "{service_name=\"k8s-events\"} |= \"Pulling\" or \"Pulled\" or \"Scheduled\" or \"Started\" or \"Unhealthy\" or \"BackOff\"",
           "refId": "A"
         }
       ],

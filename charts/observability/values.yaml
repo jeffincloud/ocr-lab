@@ -1,7 +1,7 @@
 # Installed by observability/install.sh after kube-prometheus-stack, Tempo,
 # Loki and the OpenTelemetry Collector. See observability/README.md.
 
-# Labels that kube-prometheus-stack selects PodMonitors/rules by (its release name).
+# Label that kube-prometheus-stack selects PrometheusRules by (its release name).
 prometheusReleaseLabel: kps
 
 collector:
@@ -13,45 +13,80 @@ dashboards:
   label: grafana_dashboard
   folder: OCR Lab
 
-# Scrape targets for inference engines. Enable the ones you deploy.
+# Components that only speak Prometheus exposition format. The OpenTelemetry
+# Collector scrapes them (prometheus receiver, node-local pod discovery) and
+# sends everything as OTLP, so Prometheus never scrapes anything itself: one
+# pipeline, one place for the PII and cardinality rules. Enable what you deploy.
+#   namespace  where the pods run
+#   labels     pod labels that must all match
+#   port       container port of the metrics endpoint
+#   keep       optional regex of metric names to keep (cardinality budget)
+#   honorLabels  the target reports about other pods (its pod/namespace labels win)
 scrape:
-  # vLLM behind a KServe InferenceService (charts/model, RawDeployment).
-  kserveVllm:
+  # vLLM pods of the LLMInferenceService (charts/model-llmd), and the mock in
+  # mode=mock. HTTPS with KServe's self-signed cert by default.
+  vllm:
     enabled: true
     namespace: default
-    selector:
-      matchExpressions:
-        - {key: serving.kserve.io/inferenceservice, operator: Exists}
-    targetPort: 8080
-  # vLLM pods of a KServe LLMInferenceService (llm-d integration). They serve on 8000,
-  # with TLS when KServe's global EnableTLS is on (the default install).
-  llmisvcVllm:
-    enabled: false
-    namespace: default
-    selector:
-      matchLabels:
-        app.kubernetes.io/part-of: llminferenceservice
-        kserve.io/component: workload
-    targetPort: 8000
+    labels:
+      app.kubernetes.io/part-of: llminferenceservice
+      kserve.io/component: workload
+    port: 8000
     scheme: https
-  # llm-d endpoint picker (EPP / inference scheduler) metrics.
-  llmdScheduler:
+  # llm-d endpoint picker (EPP / inference scheduler): routing decisions,
+  # scheduler latency, the pool state it sees. Plain HTTP, but /metrics wants a
+  # bearer token with RBAC on the /metrics URL; the collector sends its own.
+  epp:
+    enabled: true
+    namespace: default
+    labels:
+      app.kubernetes.io/part-of: llminferenceservice
+      app.kubernetes.io/component: llminferenceservice-router-scheduler
+    port: 9090
+    bearerToken: true
+  # Envoy proxies of the Gateway (network layer: request rate, latency and
+  # upstream errors as the edge sees them).
+  gateway:
+    enabled: true
+    namespace: envoy-gateway-system
+    labels:
+      app.kubernetes.io/component: proxy
+      app.kubernetes.io/managed-by: envoy-gateway
+    port: 19001
+    path: /stats/prometheus
+    keep: "envoy_(http_downstream_rq_(total|xx|time_bucket|time_sum|time_count)|cluster_upstream_rq_(total|xx|time_bucket|time_sum|time_count|timeout|retry)|cluster_upstream_cx_(active|connect_fail))"
+  # NVIDIA DCGM exporter (GPU layer).
+  dcgm:
+    enabled: true
+    namespace: monitoring
+    labels:
+      app.kubernetes.io/name: dcgm-exporter
+    port: 9400
+    honorLabels: true
+  # kube-state-metrics (from kube-prometheus-stack): pod creation and ready
+  # times for the cold-start rules. Not available as an OTel receiver.
+  kubeStateMetrics:
+    enabled: true
+    namespace: monitoring
+    labels:
+      app.kubernetes.io/name: kube-state-metrics
+    port: 8080
+    honorLabels: true
+    keep: "kube_pod_(created|status_ready_time|status_phase|container_status_.*|start_time|info)|kube_deployment_status_replicas.*"
+  # The original InferenceService path (charts/model, RawDeployment).
+  kserveVllm:
     enabled: false
     namespace: default
-    selector:
-      matchLabels:
-        app.kubernetes.io/part-of: llminferenceservice
-        app.kubernetes.io/component: llminferenceservice-router-scheduler
-    targetPort: 9090
-    scheme: http
-  # charts/mock-model (no-GPU development).
+    labels:
+      component: predictor
+    port: 8080
+  # charts/mock-model (plain Deployment, no KServe).
   mockLlm:
     enabled: false
     namespace: default
-    selector:
-      matchLabels:
-        app.kubernetes.io/name: mock-llm
-    targetPort: 8080
+    labels:
+      app.kubernetes.io/name: mock-llm
+    port: 8080
 
 # Prices behind the cost-per-request panels. Set them to what you actually pay.
 pricing:

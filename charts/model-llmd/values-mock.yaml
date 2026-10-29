@@ -1,0 +1,5 @@
+# No-GPU profile: apps/mock-llm behind the same LLMInferenceService, EPP and
+# Gateway. Two replicas so the endpoint picker has a choice to make.
+#   helm upgrade --install model charts/model-llmd -f charts/model-llmd/values-mock.yaml
+mode: mock
+replicas: 2

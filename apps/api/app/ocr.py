@@ -44,10 +44,10 @@ MAX_IMAGE_DIM = int(os.getenv("MAX_IMAGE_DIM", "1024"))
 OLLAMA_MODEL = os.getenv("MODEL_NAME", "qwen3-vl:4b")
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
-# OpenAI-compatible backend (cluster — vLLM serving Qwen3-VL via KServe, or a
+# OpenAI-compatible backend (cluster — vLLM serving Qwen3.5 via KServe + llm-d, or a
 # hosted provider's OpenAI-compatible endpoint for the closed-API comparison)
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://qwen3-vl-4b-predictor.default.svc.cluster.local")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL_NAME", "qwen3-vl-4b")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "http://kserve-ingress-gateway-istio.kserve.svc.cluster.local/default/qwen3-5-9b")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL_NAME", "qwen3-5-9b")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "no-key")
 OPENAI_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "60"))
 # Streaming lets the API measure time-to-first-token on the client side, which
@@ -61,6 +61,11 @@ PROVIDER_NAME = os.getenv("GENAI_PROVIDER_NAME", "vllm")
 MAX_CONNECTIONS = int(os.getenv("UPSTREAM_MAX_CONNECTIONS", "64"))
 # KServe's LLMInferenceService gateway route may use a self-signed certificate.
 OPENAI_TLS_VERIFY = os.getenv("OPENAI_TLS_VERIFY", "true").lower() == "true"
+# Extra JSON merged into every chat request, for engine-specific knobs a hosted
+# API would reject. Qwen3.5 thinks by default; for extraction that only adds
+# latency and tokens, so the vLLM charts set
+# {"chat_template_kwargs": {"enable_thinking": false}}.
+OPENAI_EXTRA_BODY = json.loads(os.getenv("OPENAI_EXTRA_BODY") or "{}")
 
 MODEL_NAME = OLLAMA_MODEL if OCR_BACKEND == "ollama" else OPENAI_MODEL
 
@@ -273,6 +278,7 @@ def _extract_openai(image_bytes: bytes, image_format: str) -> Completion:
         "max_tokens": 1024,
         "temperature": 0,
         "response_format": {"type": "json_object"},
+        **OPENAI_EXTRA_BODY,
     }
     if OPENAI_STREAM:
         body["stream"] = True

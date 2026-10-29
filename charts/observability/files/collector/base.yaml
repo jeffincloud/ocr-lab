@@ -5,8 +5,14 @@
 # PII policy and the cardinality budget, independent of what any one service
 # remembers to do (see observability/README.md).
 #
-# Used as-is by observability/local (docker compose) and, with k8s.yaml layered
-# on top, by the Helm install. Endpoints come from environment variables.
+# It is also the only collector of metrics: nothing scrapes the apps directly.
+# Components that only expose Prometheus format (vLLM, the llm-d EPP, Envoy,
+# DCGM, kube-state-metrics) are scraped by the collector's prometheus receiver
+# and forwarded as OTLP like everything else. Prometheus just stores.
+#
+# Used by observability/local (docker compose, plus local/scrape.yaml) and,
+# with k8s.yaml and the generated scrape config layered on top, by the Helm
+# install. Endpoints come from environment variables.
 
 receivers:
   otlp:
@@ -143,15 +149,21 @@ extensions:
 
 service:
   extensions: [health_check]
+  # The collector's own metrics (accepted/refused/dropped per component, queue
+  # sizes) go out over OTLP too: who watches the pipeline must not depend on it
+  # being scraped.
   telemetry:
+    resource:
+      service.name: otel-collector
     metrics:
       level: normal
       readers:
-        - pull:
+        - periodic:
+            interval: 15000
             exporter:
-              prometheus:
-                host: 0.0.0.0
-                port: 8888
+              otlp:
+                protocol: http/protobuf
+                endpoint: ${env:PROMETHEUS_OTLP_ENDPOINT}
   pipelines:
     traces:
       receivers: [otlp]
