@@ -1,0 +1,36 @@
+#cloud-config
+users:
+  - name: ${ssh_user}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+packages:
+  - git
+  - curl
+  - jq
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-ocr-lab.conf
+    content: |
+      PasswordAuthentication no
+      PermitRootLogin no
+  - path: /etc/ocr-lab/env
+    content: |
+      SSH_USER=${ssh_user}
+      REPO_URL=${repo_url}
+      REPO_REF=${repo_ref}
+      API_IMAGE=${api_image}
+      FRONTEND_IMAGE=${frontend_image}
+  - path: /usr/local/sbin/ocr-lab-bootstrap
+    permissions: "0755"
+    content: |
+      ${indent(6, bootstrap)}
+
+# Run as a transient unit so cloud-init finishes quickly and the log lives in
+# the journal. The model download alone can take 10+ minutes.
+runcmd:
+  - systemctl restart ssh
+  - systemd-run --unit ocr-lab-bootstrap --setenv=HOME=/root --description "ocr-lab bootstrap" /usr/local/sbin/ocr-lab-bootstrap

@@ -1,0 +1,10 @@
+# cp terraform.tfvars.example terraform.tfvars   (terraform.tfvars is gitignored)
+project_id     = "project-e00..."
+nebius_profile = "default"
+
+# preset      = "1gpu-16vcpu-64gb"
+# preemptible = true
+
+# Set both to have cloud-init run scripts/lab-up.sh PROFILE=gpu on boot.
+# api_image      = "ghcr.io/jeffincloud/ocr-lab-api:0.2.0"
+# frontend_image = "ghcr.io/jeffincloud/ocr-lab-frontend:0.2.0"

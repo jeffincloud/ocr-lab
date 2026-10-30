@@ -1,0 +1,44 @@
+#cloud-config
+users:
+  - name: ${ssh_user}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${ssh_public_key}
+
+package_update: true
+packages:
+  - wireguard
+  - iptables
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/10-ocr-lab.conf
+    content: |
+      PasswordAuthentication no
+      PermitRootLogin no
+  - path: /etc/sysctl.d/99-wireguard.conf
+    content: |
+      net.ipv4.ip_forward = 1
+  # Tunnel clients are masqueraded to this VM's private IP, which is what the
+  # GPU VM's security group allows in.
+  - path: /etc/wireguard/wg0.conf
+    permissions: "0600"
+    content: |
+      [Interface]
+      Address = ${wg_address}
+      ListenPort = ${wg_port}
+      PrivateKey = ${wg_private_key}
+      PostUp = iptables -t nat -A POSTROUTING -s ${wg_cidr} -o $(ip -4 route show default | awk '{print $5; exit}') -j MASQUERADE; iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+      PostDown = iptables -t nat -D POSTROUTING -s ${wg_cidr} -o $(ip -4 route show default | awk '{print $5; exit}') -j MASQUERADE; iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+%{ for peer in wg_peers ~}
+
+      # ${peer.name}
+      [Peer]
+      PublicKey = ${peer.public_key}
+      AllowedIPs = ${peer.address}/32
+%{ endfor ~}
+
+runcmd:
+  - sysctl --system
+  - systemctl restart ssh
+  - systemctl enable --now wg-quick@wg0

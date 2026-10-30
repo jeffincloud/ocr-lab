@@ -1,0 +1,11 @@
+# ocr-lab WireGuard client. Import into the WireGuard app, or:
+#   sudo wg-quick up <this file>
+[Interface]
+Address = ${address}
+PrivateKey = ${private_key}
+
+[Peer]
+PublicKey = ${server_key}
+Endpoint = ${endpoint}
+AllowedIPs = ${allowed_ips}
+PersistentKeepalive = 25

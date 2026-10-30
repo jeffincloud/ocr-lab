@@ -1,0 +1,7 @@
+# cp terraform.tfvars.example terraform.tfvars   (terraform.tfvars is gitignored)
+project_id     = "project-e00..."   # an eu-north1 project (L40S is only there)
+nebius_profile = "default"          # `nebius profile list`
+
+# wireguard_peers         = ["laptop"]
+# wireguard_allowed_cidrs = ["203.0.113.7/32"]   # your IP, if it is stable
+# ssh_break_glass_cidrs   = []

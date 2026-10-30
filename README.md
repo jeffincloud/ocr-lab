@@ -43,6 +43,8 @@ charts/
 observability/    Stack install (Prometheus, Grafana, Tempo, Loki, Collector, DCGM),
                   local docker-compose stack, SLOs and dashboards as code
 loadtest/         k6 (many users, scored against ground truth) + GuideLLM (engine)
+infra/
+  nebius/         Terraform: preemptible L40S VM + WireGuard jump server, cloud-init bootstrap
 tools/
   passport-gen/   Synthetic passports with ground truth
   pii-probe/      Sends leaky telemetry to prove the collector's PII policy
