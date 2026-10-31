@@ -92,8 +92,12 @@ helm upgrade --install model "$REPO_ROOT/charts/model-llmd" -n "$NS" \
 log "Waiting for ${MODEL_NAME} to be Ready (first GPU start downloads ~14 GB)..."
 kubectl -n "$NS" wait "llminferenceservice/${MODEL_NAME}" --for=condition=Ready --timeout="${MODEL_TIMEOUT:-30m}"
 # With maxUnavailable: 1 a Deployment counts as Available with zero pods, so Ready
-# can be true while the model is still downloading. Wait for the pod itself.
-kubectl -n "$NS" rollout status "deployment/${MODEL_NAME}-kserve" --timeout="${MODEL_TIMEOUT:-30m}"
+# can be true while the model is still starting. Wait for the pods themselves, and
+# not with rollout status: it gives up at the Deployment's 10-minute progress
+# deadline, and a fresh node takes longer than that to pull vLLM and load the model.
+REPLICAS="$(kubectl -n "$NS" get "deployment/${MODEL_NAME}-kserve" -o jsonpath='{.spec.replicas}')"
+kubectl -n "$NS" wait "deployment/${MODEL_NAME}-kserve" \
+  --for="jsonpath={.status.availableReplicas}=${REPLICAS}" --timeout="${MODEL_TIMEOUT:-30m}"
 
 # The API calls the model through the Gateway, inside the cluster: Envoy's own
 # Service, then the route KServe created (/<namespace>/<name>/v1/...).
