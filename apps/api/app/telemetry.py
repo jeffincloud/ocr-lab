@@ -19,8 +19,10 @@ log = logging.getLogger(__name__)
 
 SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "ocr-api")
 
-# Seconds. Covers a 50 ms cache hit up to the 60 s upstream timeout.
-LATENCY_BUCKETS = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 90]
+# Seconds. Covers a 50 ms cache hit up to the 60 s upstream timeout, with detail
+# from 10 to 30 s, where extractions with thinking on land. With nothing between 20
+# and 30, a measured p95 of 24 s was reported as 28 s.
+LATENCY_BUCKETS = [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 30, 45, 60, 90]
 TOKEN_BUCKETS = [16, 32, 64, 128, 256, 512, 768, 1024, 1536, 2048, 4096, 8192]
 BYTES_BUCKETS = [16_384, 65_536, 131_072, 262_144, 524_288, 1_048_576, 2_097_152, 4_194_304, 8_388_608]
 

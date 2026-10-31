@@ -121,11 +121,11 @@ app metrics should stay under ~5,000 series.
 
 | Metric | Labels | Max values | Series (approx.) |
 |---|---|---|---|
-| `ocr_extract_duration_seconds` | outcome × backend | 7 × 2 | 14 × 21 buckets ≈ 300 |
+| `ocr_extract_duration_seconds` | outcome × backend | 7 × 2 | 14 × 26 buckets ≈ 365 |
 | `ocr_extractions_total` | outcome × backend | 7 × 2 | 14 |
-| `ocr_stage_duration_seconds` | stage | 4 | 4 × 21 ≈ 85 |
+| `ocr_stage_duration_seconds` | stage | 4 | 4 × 26 ≈ 105 |
 | `ocr_mrz_checks_total` | result | 4 | 4 |
-| `ocr_mrz_field_agreement_total` | field × agree | 7 × 2 | 14 |
+| `ocr_mrz_field_agreement_total` | field × agree | 6 × 2 | 12 |
 | `gen_ai_client_*` | model × provider × token type × error type | ~2 × 2 × 2 × 5 | < 1,000 |
 | `vllm:*` (scraped) | model_name × pod | 1 × replicas | a few hundred per replica |
 

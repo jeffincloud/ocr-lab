@@ -8,6 +8,7 @@ import pathlib
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "apps" / "api"))
 
+from app import ocr  # noqa: E402
 from app.ocr import _merge_mrz, _yymmdd_to_iso  # noqa: E402
 from app.schemas import PassportFields  # noqa: E402
 
@@ -50,6 +51,16 @@ def test_valid_mrz_does_not_overwrite_names():
     out = _merge_mrz(vlm)
     assert out.surname == "OKAFOR"
     assert out.given_names == "CHIDI"
+
+
+def test_field_agreement_skips_nationality(monkeypatch):
+    # The page prints COLOMBIA and the MRZ says COL. Counting that as a disagreement
+    # would put a floor under the visual-agreement SLI's error rate on every passport.
+    seen = []
+    monkeypatch.setattr(ocr.tel.field_agreement, "add", lambda n, attrs: seen.append(attrs["field"]))
+    _merge_mrz(PassportFields(nationality="UTOPIA", mrz_line1=VALID_MRZ_L1, mrz_line2=VALID_MRZ_L2))
+    assert "nationality" not in seen
+    assert "surname" in seen
 
 
 def test_valid_mrz_fills_in_missing_names():

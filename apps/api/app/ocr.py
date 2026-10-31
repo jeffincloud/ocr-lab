@@ -207,8 +207,9 @@ def _norm(v: Optional[str]) -> str:
 def _record_field_agreement(vlm: PassportFields, mrz: PassportFields) -> None:
     """Count, per field, whether what the VLM read from the printed page matches
     the check-digit-validated MRZ. A drop here means the model's visual reading
-    got worse even when the MRZ still rescues the final answer."""
-    for name in ("surname", "given_names", "passport_number", "nationality",
+    got worse even when the MRZ still rescues the final answer. Not nationality:
+    the page prints COLOMBIA and the MRZ says COL, so it never matches."""
+    for name in ("surname", "given_names", "passport_number",
                  "date_of_birth", "sex", "date_of_expiry"):
         agree = _norm(getattr(vlm, name)) == _norm(getattr(mrz, name))
         tel.field_agreement.add(1, {"field": name, "agree": str(agree).lower()})
