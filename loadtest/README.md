@@ -33,6 +33,7 @@ k6 run -e BASE_URL=http://<host>/api -e SCENARIO=users -e PEAK_USERS=100 loadtes
 |---|---|---|
 | `smoke` | 1 user, 1 min | sanity check |
 | `users` | closed: ramps to `PEAK_USERS`, 1–5 s think time | "many users at once" |
+| `minute` | closed: the same shape in one minute | a quick burst to watch on the dashboards |
 | `rate` | open: steps up to `MAX_RPS` | find the knee |
 | `spike` | open: 1 → `SPIKE_RPS` in 10 s | queueing, timeouts, burn-rate alerts |
 | `soak` | open: `SOAK_RPS` for `SOAK_MINUTES` | throttling, leaks, budget burn |

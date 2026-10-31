@@ -50,6 +50,17 @@ If the images are not set, finish from the laptop over the tunnel:
 `VM_IP=$(terraform -chdir=gpu output -raw tunnel_ip) SSH_USER=lab SKIP_BOOTSTRAP=1 ../../scripts/provision.sh`
 (`ssh-add .secrets/id_ed25519` first).
 
+## Observability
+
+A rebuilt VM gets the whole stack from cloud-init (`install_observability`, on by
+default). It is only reachable through the tunnel:
+`KUBECONFIG=~/.kube/ocr-lab.config kubectl -n monitoring port-forward svc/kps-grafana 3000:80`.
+
+| Event | Stack | Metrics, traces and logs |
+|---|---|---|
+| Stop, start or preemption | Comes back by itself | Kept, on the boot disk |
+| `gpu-down` then `gpu-up` | Reinstalled by cloud-init | Lost with the boot disk |
+
 ## Exposing the app
 
 SSH, the Kubernetes API and everything else stay on the tunnel. To test with real

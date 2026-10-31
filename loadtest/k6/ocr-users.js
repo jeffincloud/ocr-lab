@@ -11,6 +11,8 @@
 //   smoke   1 user for 1 minute. Sanity check before anything bigger.
 //   users   Closed model: ramp to PEAK_USERS users, each waiting 1-5 s between
 //           uploads (people reading results). "Many users at once".
+//   minute  The users shape in one minute: ramp, hold PEAK_USERS, ramp down. A quick
+//           burst of traffic to watch on the dashboards.
 //   rate    Open model: arrival rate climbs in steps up to MAX_RPS. Finds the
 //           knee where queue time and latency take off. Use for capacity.
 //   spike   Arrival rate jumps from 1 to SPIKE_RPS in 10 s, holds, drops.
@@ -70,6 +72,17 @@ const SCENARIOS = {
       { duration: '3m', target: PEAK_USERS },
       { duration: '5m', target: PEAK_USERS },
       { duration: '2m', target: 0 },
+    ],
+    gracefulRampDown: '60s',
+  },
+  minute: {
+    executor: 'ramping-vus',
+    startVUs: 0,
+    stages: [
+      { duration: '10s', target: Math.ceil(PEAK_USERS / 2) },
+      { duration: '10s', target: PEAK_USERS },
+      { duration: '30s', target: PEAK_USERS },
+      { duration: '10s', target: 0 },
     ],
     gracefulRampDown: '60s',
   },
@@ -176,7 +189,7 @@ export default async function () {
     if (data.usage?.output_tokens) outputTokens.add(data.usage.output_tokens);
   }
 
-  if (SCENARIO === 'users' || SCENARIO === 'smoke') {
+  if (SCENARIO === 'users' || SCENARIO === 'smoke' || SCENARIO === 'minute') {
     sleep(1 + Math.random() * 4); // think time; arrival-rate scenarios pace themselves
   }
 }
