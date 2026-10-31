@@ -73,10 +73,12 @@ groups:
       # Seconds from pod creation to Ready for model-serving pods. Image pull,
       # weight download/load and CUDA graph capture all sit inside this number;
       # the per-phase breakdown is in the Kubernetes events and vLLM logs (Loki).
+      # The pod names of LLMInferenceService workloads, and neither the scheduler
+      # beside them nor KServe's own controllers, which also contain "kserve".
       - record: ocr:model_pod_time_to_ready_seconds
         expr: >-
-          max by (namespace, pod) (kube_pod_status_ready_time{pod=~".*(predictor|kserve|vllm|mock-llm|llm).*"})
-          - max by (namespace, pod) (kube_pod_created{pod=~".*(predictor|kserve|vllm|mock-llm|llm).*"})
+          max by (namespace, pod) (kube_pod_status_ready_time{pod=~".+-kserve-[0-9a-f]+-[a-z0-9]+|.*predictor.*|mock-llm.*"})
+          - max by (namespace, pod) (kube_pod_created{pod=~".+-kserve-[0-9a-f]+-[a-z0-9]+|.*predictor.*|mock-llm.*"})
 
   # The collector is the only path for telemetry; watch it from outside its
   # pipelines (its own metrics go to Prometheus over a separate OTLP exporter).

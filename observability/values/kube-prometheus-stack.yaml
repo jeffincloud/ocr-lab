@@ -11,6 +11,17 @@ fullnameOverride: kps
 prometheus:
   prometheusSpec:
     retention: 15d
+    retentionSize: 25GB
+    # Without this, metrics live on an emptyDir and are lost when the pod is recreated.
+    # local-path keeps them on the node's boot disk, so they survive a stop or
+    # preemption but not a rebuild.
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 30Gi
     enableOTLPReceiver: true
     enableRemoteWriteReceiver: true
     enableFeatures: [exemplar-storage]
@@ -119,8 +130,8 @@ grafana:
               query: histogram_quantile(0.95, sum by (le) (rate(vllm:request_queue_time_seconds_bucket[1m])))
             - name: KV cache usage
               query: max(vllm:kv_cache_usage_perc)
-            - name: GPU SM active
-              query: avg(DCGM_FI_PROF_SM_ACTIVE)
+            - name: GPU power
+              query: sum(DCGM_FI_DEV_POWER_USAGE)
     - name: Loki
       uid: loki
       type: loki

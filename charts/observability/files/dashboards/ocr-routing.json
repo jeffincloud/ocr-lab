@@ -62,7 +62,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (envoy_response_code_class) (rate(envoy_http_downstream_rq_xx[$__rate_interval]))",
+          "expr": "sum by (envoy_response_code_class) (rate(envoy_http_downstream_rq_xx_total[$__rate_interval]))",
           "legendFormat": "{{envoy_response_code_class}}xx",
           "refId": "A"
         }

@@ -1,0 +1,11 @@
+# Mounted by the DCGM exporter chart in place of its default counters
+# (observability/values/dcgm-exporter.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocr-dcgm-counters
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+data:
+  metrics: |
+    {{- .Files.Get "files/dcgm/counters.csv" | nindent 4 }}

@@ -72,6 +72,8 @@ scrape:
       app.kubernetes.io/name: kube-state-metrics
     port: 8080
     honorLabels: true
+    # kube_pod_created is a real metric here, and the cold-start rules need it.
+    keepCreated: true
     keep: "kube_pod_(created|status_ready_time|status_phase|container_status_.*|start_time|info)|kube_deployment_status_replicas.*"
   # The original InferenceService path (charts/model, RawDeployment).
   kserveVllm:

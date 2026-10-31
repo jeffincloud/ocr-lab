@@ -59,10 +59,12 @@ data:
                 - source_labels: [__meta_kubernetes_pod_name]
                   target_label: pod
               metric_relabel_configs:
+                {{- if not $t.keepCreated }}
                 # prometheus_client's *_created series double the count for nothing.
                 - source_labels: [__name__]
                   regex: ".*_created"
                   action: drop
+                {{- end }}
                 {{- with $t.keep }}
                 - source_labels: [__name__]
                   regex: {{ . | quote }}

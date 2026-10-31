@@ -50,8 +50,8 @@
     },
     {
       "type": "timeseries",
-      "title": "Utilization vs real activity",
-      "description": "Prefill is compute-bound (tensor active), decode is memory-bound (DRAM active). PROF_* fields may be missing on consumer GPUs.",
+      "title": "Utilization vs real work",
+      "description": "GPU util reads about 100% with one request or with 64, so it says little about headroom. Tokens per second and the KV cache do. SM and tensor activity (DCGM_FI_PROF_*) crash the exporter on this VM.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -71,8 +71,8 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "avg(DCGM_FI_PROF_SM_ACTIVE)",
-          "legendFormat": "SM active",
+          "expr": "avg(DCGM_FI_DEV_MEM_COPY_UTIL) / 100",
+          "legendFormat": "memory utilization",
           "refId": "B"
         },
         {
@@ -80,18 +80,9 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "avg(DCGM_FI_PROF_PIPE_TENSOR_ACTIVE)",
-          "legendFormat": "tensor cores active",
+          "expr": "max(vllm:kv_cache_usage_perc)",
+          "legendFormat": "KV cache",
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "avg(DCGM_FI_PROF_DRAM_ACTIVE)",
-          "legendFormat": "memory bandwidth active",
-          "refId": "D"
         }
       ],
       "fieldConfig": {

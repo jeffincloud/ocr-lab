@@ -1,17 +1,23 @@
 # NVIDIA DCGM exporter (standalone; the lab doesn't run the GPU Operator).
 # Adds pod/namespace labels to GPU series so they join with vLLM metrics.
+# The collector scrapes it (charts/observability scrape.dcgm). A ServiceMonitor would
+# have Prometheus scrape it too, and sums over duplicate series double GPU power.
 serviceMonitor:
-  enabled: true
-  interval: 10s
-  additionalLabels:
-    release: kps
+  enabled: false
 kubernetes:
   enablePodLabels: true
 extraEnv:
   - name: DCGM_EXPORTER_KUBERNETES
     value: "true"
-# Profiling fields (SM/tensor/DRAM active) are in the default counters on
-# datacenter GPUs; consumer GPUs may not report them.
+# The default counters include profiling fields, which crash the exporter on the
+# Nebius VM; see charts/observability/files/dcgm/counters.csv.
+extraConfigMapVolumes:
+  - name: exporter-metrics-volume
+    configMap:
+      name: ocr-dcgm-counters
+      items:
+        - key: metrics
+          path: default-counters.csv
 runtimeClassName: nvidia
 tolerations:
   - {key: nvidia.com/gpu, operator: Exists, effect: NoSchedule}

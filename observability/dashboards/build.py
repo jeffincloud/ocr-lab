@@ -284,7 +284,7 @@ def routing_board():
               "A closed API hides all of this behind one endpoint.", ["llm-d", "gateway"])
     b.row("Gateway (Envoy)")
     b.add(ts("Requests by response class", [
-        ("sum by (envoy_response_code_class) (rate(envoy_http_downstream_rq_xx[$__rate_interval]))", "{{envoy_response_code_class}}xx")],
+        ("sum by (envoy_response_code_class) (rate(envoy_http_downstream_rq_xx_total[$__rate_interval]))", "{{envoy_response_code_class}}xx")],
         "reqps", stack=True, desc="As the edge sees them, before the API. 5xx here and not in the API means the gateway or EPP failed."), 12, 8)
     b.add(ts("Gateway latency", [
         ("histogram_quantile(0.95, sum by (le) (rate(envoy_http_downstream_rq_time_bucket[$__rate_interval]))) / 1000", "p95"),
@@ -334,13 +334,12 @@ def gpu_board():
               "The hardware layer. Utilization alone lies; SM/tensor activity, memory bandwidth, power and "
               "clocks tell you what the GPU is really doing.", ["gpu", "dcgm"])
     b.row("Is the GPU busy, and with what?")
-    b.add(ts("Utilization vs real activity", [
+    b.add(ts("Utilization vs real work", [
         ("avg(DCGM_FI_DEV_GPU_UTIL) / 100", "GPU util (any kernel running)"),
-        ("avg(DCGM_FI_PROF_SM_ACTIVE)", "SM active"),
-        ("avg(DCGM_FI_PROF_PIPE_TENSOR_ACTIVE)", "tensor cores active"),
-        ("avg(DCGM_FI_PROF_DRAM_ACTIVE)", "memory bandwidth active")], "percentunit", max_=1,
-        desc="Prefill is compute-bound (tensor active), decode is memory-bound (DRAM active). PROF_* fields "
-             "may be missing on consumer GPUs."), 12, 9)
+        ("avg(DCGM_FI_DEV_MEM_COPY_UTIL) / 100", "memory utilization"),
+        ("max(vllm:kv_cache_usage_perc)", "KV cache")], "percentunit", max_=1,
+        desc="GPU util reads about 100% with one request or with 64, so it says little about headroom. Tokens "
+             "per second and the KV cache do. SM and tensor activity (DCGM_FI_PROF_*) crash the exporter on this VM."), 12, 9)
     b.add(ts("Framebuffer memory", [("sum(DCGM_FI_DEV_FB_USED) * 1024 * 1024", "used"),
                                     ("sum(DCGM_FI_DEV_FB_FREE) * 1024 * 1024", "free")], "bytes", stack=True,
              desc="vLLM pre-allocates ~90% at start-up for weights + KV cache. High 'used' at idle is not pressure; "

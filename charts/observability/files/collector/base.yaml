@@ -41,7 +41,8 @@ processors:
   # `span.set_attribute("passport.surname", ...)` loses it here, not in a
   # storage backend. New keys must be added on purpose, in review.
   # (Applies to span events too, so exception stack traces are dropped and
-  # exception messages are masked.)
+  # exception messages are masked. It also applies to resource attributes, so
+  # identity like service.name must be listed or every trace loses its service.)
   redaction/spans:
     allow_all_keys: false
     allowed_keys:
@@ -52,6 +53,9 @@ processors:
       - 'data:image/[a-z]+;base64,[A-Za-z0-9+/=]+'
       - '(?i)bearer [A-Za-z0-9._-]+'
     ignored_key_patterns:
+      - '^service\.(name|namespace|version|instance\.id)$'
+      - '^deployment\.environment(\.name)?$'
+      - '^telemetry\.sdk\.'
       - '^exception\.(type|escaped)$'
       - '^http\.(request|response)\.(method|status_code|body\.size|header\.content-length)$'
       - '^http\.(route|method|status_code|scheme|flavor)$'

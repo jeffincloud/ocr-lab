@@ -26,7 +26,7 @@ KPS_VERSION="${KPS_VERSION:-92.11.0}"
 LOKI_VERSION="${LOKI_VERSION:-7.3.0}"
 TEMPO_VERSION="${TEMPO_VERSION:-3.2.0}"
 OTELCOL_VERSION="${OTELCOL_VERSION:-0.176.1}"
-DCGM_VERSION="${DCGM_VERSION:-}"   # empty = latest from NVIDIA's repo
+DCGM_VERSION="${DCGM_VERSION:-4.8.4}"
 
 log() { echo "[observability] $*"; }
 require() { command -v "$1" >/dev/null 2>&1 || { echo "missing: $1" >&2; exit 1; }; }

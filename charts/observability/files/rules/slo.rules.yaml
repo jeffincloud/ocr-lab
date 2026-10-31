@@ -657,7 +657,7 @@ groups:
     annotations:
       summary: vLLM is preempting sequences (KV cache pressure).
   - alert: GPUThrottling
-    expr: max(DCGM_FI_DEV_GPU_TEMP) > 83 or max(DCGM_FI_DEV_CLOCK_THROTTLE_REASONS) > 1
+    expr: max(DCGM_FI_DEV_GPU_TEMP) > 83 or max(DCGM_FI_DEV_CLOCKS_EVENT_REASONS) > 1
     for: 5m
     labels:
       severity: warning

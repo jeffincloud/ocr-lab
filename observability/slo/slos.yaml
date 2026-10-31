@@ -72,7 +72,7 @@ saturation_alerts:
     for: 2m
     summary: vLLM is preempting sequences (KV cache pressure).
   - name: GPUThrottling
-    expr: max(DCGM_FI_DEV_GPU_TEMP) > 83 or max(DCGM_FI_DEV_CLOCK_THROTTLE_REASONS) > 1
+    expr: max(DCGM_FI_DEV_GPU_TEMP) > 83 or max(DCGM_FI_DEV_CLOCKS_EVENT_REASONS) > 1
     for: 5m
     summary: GPU hot or clock-throttled; sustained-load latency will drift.
   - name: GPUXidError
