@@ -1,6 +1,7 @@
-# Persistent half of the lab: network, firewall, SSH + WireGuard keys and the
-# jump server. Apply once and leave it up (a 2 vCPU VM). The GPU VM lives in
-# ../gpu and can be destroyed and rebuilt without touching anything here.
+# Persistent half of the lab: network, firewall, a reserved public IP, and the
+# SSH + WireGuard keys. Apply once and leave it up; it runs no VM. The GPU VM
+# lives in ../gpu and can be destroyed and rebuilt without touching anything
+# here, so client configs keep working across rebuilds.
 
 locals {
   secrets_dir = abspath("${path.module}/../.secrets")
@@ -11,8 +12,7 @@ locals {
       address = cidrhost(var.wireguard_cidr, 10 + i)
     }
   }
-  jump_ip   = split("/", nebius_vpc_v1_allocation.jump.status.details.allocated_cidr)[0]
-  vpc_cidrs = flatten(nebius_vpc_v1_subnet.lab.status.ipv4_private_pools[*].cidrs)
+  public_ip = split("/", nebius_vpc_v1_allocation.gpu.status.details.allocated_cidr)[0]
 }
 
 # --- Network -------------------------------------------------------------------
@@ -27,22 +27,48 @@ resource "nebius_vpc_v1_subnet" "lab" {
   network_id = nebius_vpc_v1_network.lab.id
 }
 
-# --- Firewall ------------------------------------------------------------------
-# Security groups deny anything not allowed. The jump server only accepts
-# WireGuard from outside; the GPU VM only accepts traffic from the jump server
-# (tunnel clients are masqueraded to the jump's private IP).
-resource "nebius_vpc_v1_security_group" "jump" {
-  name       = "${var.name}-jump"
-  network_id = nebius_vpc_v1_network.lab.id
+# Reserved public IP, so the WireGuard endpoint survives a stop or a rebuild.
+resource "nebius_vpc_v1_allocation" "gpu" {
+  name = "${var.name}-gpu"
+  ipv4_public = {
+    subnet_id = nebius_vpc_v1_subnet.lab.id
+  }
 }
 
+# --- Model weights -------------------------------------------------------------
+# Attached to the GPU VM and left behind when it is destroyed, so a rebuild doesn't
+# download the model again. `./lab.sh gpu-down` keeps it; `./lab.sh down` deletes it.
+# Non-replicated: the weights can be downloaded again, and reading them is what sets
+# recovery time. A 50 GiB NETWORK_SSD read at 31 MB/s, which took 447 s to load them.
+resource "nebius_compute_v1_disk" "models" {
+  name           = "${var.name}-models"
+  type           = "NETWORK_SSD_NON_REPLICATED"
+  size_gibibytes = var.models_disk_gib
+}
+
+# --- Firewall ------------------------------------------------------------------
+# Security groups deny anything not allowed. SSH and the Kubernetes API are only
+# reached through the WireGuard tunnel. The app is too, unless public_app_cidrs
+# opens its port.
 resource "nebius_vpc_v1_security_group" "gpu" {
   name       = "${var.name}-gpu"
   network_id = nebius_vpc_v1_network.lab.id
 }
 
-resource "nebius_vpc_v1_security_rule" "jump_wireguard" {
-  parent_id = nebius_vpc_v1_security_group.jump.id
+resource "nebius_vpc_v1_security_rule" "gpu_public_app" {
+  count     = length(var.public_app_cidrs) > 0 ? 1 : 0
+  parent_id = nebius_vpc_v1_security_group.gpu.id
+  name      = "public-app"
+  access    = "ALLOW"
+  protocol  = "TCP"
+  ingress = {
+    source_cidrs      = var.public_app_cidrs
+    destination_ports = [80]
+  }
+}
+
+resource "nebius_vpc_v1_security_rule" "gpu_wireguard" {
+  parent_id = nebius_vpc_v1_security_group.gpu.id
   name      = "wireguard-in"
   access    = "ALLOW"
   protocol  = "UDP"
@@ -52,9 +78,9 @@ resource "nebius_vpc_v1_security_rule" "jump_wireguard" {
   }
 }
 
-resource "nebius_vpc_v1_security_rule" "jump_ssh_break_glass" {
+resource "nebius_vpc_v1_security_rule" "gpu_ssh_break_glass" {
   count     = length(var.ssh_break_glass_cidrs) > 0 ? 1 : 0
-  parent_id = nebius_vpc_v1_security_group.jump.id
+  parent_id = nebius_vpc_v1_security_group.gpu.id
   name      = "ssh-break-glass"
   access    = "ALLOW"
   protocol  = "TCP"
@@ -64,26 +90,8 @@ resource "nebius_vpc_v1_security_rule" "jump_ssh_break_glass" {
   }
 }
 
-resource "nebius_vpc_v1_security_rule" "jump_egress" {
-  parent_id = nebius_vpc_v1_security_group.jump.id
-  name      = "all-out"
-  access    = "ALLOW"
-  protocol  = "ANY"
-  egress    = {}
-}
-
-resource "nebius_vpc_v1_security_rule" "gpu_from_jump" {
-  parent_id = nebius_vpc_v1_security_group.gpu.id
-  name      = "from-jump"
-  access    = "ALLOW"
-  protocol  = "ANY"
-  ingress = {
-    source_security_group_id = nebius_vpc_v1_security_group.jump.id
-  }
-}
-
 # Model weights, container images, Hugging Face and GitHub all come in over
-# the GPU VM's own public IP; nothing can connect in on it.
+# the GPU VM's public IP.
 resource "nebius_vpc_v1_security_rule" "gpu_egress" {
   parent_id = nebius_vpc_v1_security_group.gpu.id
   name      = "all-out"
@@ -124,77 +132,25 @@ resource "local_sensitive_file" "wireguard_peer" {
     address     = "${each.value.address}/32"
     private_key = wireguard_asymmetric_key.peer[each.key].private_key
     server_key  = wireguard_asymmetric_key.server.public_key
-    endpoint    = "${local.jump_ip}:${var.wireguard_port}"
-    allowed_ips = join(", ", concat([var.wireguard_cidr], local.vpc_cidrs))
+    endpoint    = "${local.public_ip}:${var.wireguard_port}"
+    allowed_ips = var.wireguard_cidr
   })
   file_permission = "0600"
-}
-
-# --- Jump server ---------------------------------------------------------------
-# Reserved public IP, so the WireGuard endpoint survives a jump server rebuild.
-resource "nebius_vpc_v1_allocation" "jump" {
-  name = "${var.name}-jump"
-  ipv4_public = {
-    subnet_id = nebius_vpc_v1_subnet.lab.id
-  }
-}
-
-resource "nebius_compute_v1_instance" "jump" {
-  name = "${var.name}-jump"
-
-  resources = {
-    platform = var.jump_platform
-    preset   = var.jump_preset
-  }
-
-  boot_disk = {
-    attach_mode = "READ_WRITE"
-    managed_disk = {
-      name = "${var.name}-jump-boot"
-      spec = {
-        type                = "NETWORK_SSD"
-        size_gibibytes      = 20
-        source_image_family = { image_family = var.jump_image_family }
-      }
-    }
-  }
-
-  network_interfaces = [{
-    name              = "eth0"
-    subnet_id         = nebius_vpc_v1_subnet.lab.id
-    ip_address        = {}
-    public_ip_address = { allocation_id = nebius_vpc_v1_allocation.jump.id }
-    security_groups   = [{ id = nebius_vpc_v1_security_group.jump.id }]
-  }]
-
-  cloud_init_user_data = templatefile("${path.module}/templates/jump-cloud-init.yaml.tftpl", {
-    ssh_user       = var.ssh_user
-    ssh_public_key = trimspace(tls_private_key.ssh.public_key_openssh)
-    wg_address     = "${local.wg_server}/${local.wg_mask}"
-    wg_cidr        = var.wireguard_cidr
-    wg_port        = var.wireguard_port
-    wg_private_key = wireguard_asymmetric_key.server.private_key
-    wg_peers = [
-      for name, peer in local.wg_peers : {
-        name       = name
-        public_key = wireguard_asymmetric_key.peer[name].public_key
-        address    = peer.address
-      }
-    ]
-  })
 }
 
 resource "local_file" "ssh_config" {
   filename = "${local.secrets_dir}/ssh_config"
   content  = <<-EOT
-    # Generated by infra/nebius/base. Use with: ssh -F ${local.secrets_dir}/ssh_config <host>
-    # Reach these hosts with the WireGuard tunnel up (wg-quick up ${local.secrets_dir}/wg-<peer>.conf).
-    Host ocr-jump
+    # Generated by infra/nebius/base. Use with: ssh -F ${local.secrets_dir}/ssh_config ocr-gpu
+    # Reach this host with the WireGuard tunnel up (wg-quick up ${local.secrets_dir}/wg-<peer>.conf).
+    Host ocr-gpu
       HostName ${local.wg_server}
       User ${var.ssh_user}
       IdentityFile ${local.secrets_dir}/id_ed25519
       IdentitiesOnly yes
-
-    Include ${local.secrets_dir}/ssh_config.gpu
+      # A rebuilt VM has a new host key on the same address.
+      UserKnownHostsFile /dev/null
+      StrictHostKeyChecking no
+      LogLevel ERROR
   EOT
 }

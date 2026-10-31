@@ -11,12 +11,28 @@ packages:
   - git
   - curl
   - jq
+  - wireguard-tools
 
 write_files:
   - path: /etc/ssh/sshd_config.d/10-ocr-lab.conf
     content: |
       PasswordAuthentication no
       PermitRootLogin no
+  # Clients talk to this VM's tunnel address, so there is no forwarding to set up.
+  - path: /etc/wireguard/wg0.conf
+    permissions: "0600"
+    content: |
+      [Interface]
+      Address = ${wg.address}
+      ListenPort = ${wg.port}
+      PrivateKey = ${wg.private_key}
+%{ for peer in wg.peers ~}
+
+      # ${peer.name}
+      [Peer]
+      PublicKey = ${peer.public_key}
+      AllowedIPs = ${peer.address}/32
+%{ endfor ~}
   - path: /etc/ocr-lab/env
     content: |
       SSH_USER=${ssh_user}
@@ -24,13 +40,17 @@ write_files:
       REPO_REF=${repo_ref}
       API_IMAGE=${api_image}
       FRONTEND_IMAGE=${frontend_image}
+      SKIP_OBSERVABILITY=${skip_obs}
+      TUNNEL_IP=${tunnel_ip}
   - path: /usr/local/sbin/ocr-lab-bootstrap
     permissions: "0755"
     content: |
       ${indent(6, bootstrap)}
 
 # Run as a transient unit so cloud-init finishes quickly and the log lives in
-# the journal. The model download alone can take 10+ minutes.
+# the journal. The model download alone can take 10+ minutes. The tunnel comes
+# up first, so a failed bootstrap can still be debugged over SSH.
 runcmd:
   - systemctl restart ssh
+  - systemctl enable --now wg-quick@wg0
   - systemd-run --unit ocr-lab-bootstrap --setenv=HOME=/root --description "ocr-lab bootstrap" /usr/local/sbin/ocr-lab-bootstrap

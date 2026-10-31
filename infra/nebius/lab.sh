@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Nebius lab lifecycle. The base stack (network, firewall, keys, WireGuard jump
-# server) stays up; the preemptible GPU VM is cheap to throw away and rebuild.
+# Nebius lab lifecycle. The base stack (network, firewall, public IP, keys) stays
+# up; the preemptible GPU VM, which runs the WireGuard server, is cheap to throw
+# away and rebuild.
 #
 #   ./lab.sh up            base + GPU VM (first time)
 #   ./lab.sh gpu-up        (re)create the GPU VM only
 #   ./lab.sh gpu-down      destroy the GPU VM and its disk; keeps everything else
 #   ./lab.sh stop|start    stop or start the GPU VM in place (also: restart after preemption)
 #   ./lab.sh status        GPU VM state
-#   ./lab.sh ssh [host]    ssh to ocr-gpu (default) or ocr-jump over the tunnel
+#   ./lab.sh ssh [cmd]     ssh to the GPU VM over the tunnel
 #   ./lab.sh kubeconfig    copy the K3s kubeconfig to ~/.kube/ocr-lab.config
 #   ./lab.sh down          destroy everything
 #
@@ -45,12 +46,12 @@ case "$cmd" in
   stop)   nebius compute instance stop --id "$(gpu_id)" ;;
   start)  nebius compute instance start --id "$(gpu_id)" ;;
   status) nebius compute instance get --id "$(gpu_id)" --format jsonpath='{.status.state}'; echo ;;
-  ssh)    ssh -F "$SECRETS/ssh_config" "${1:-ocr-gpu}" "${@:2}" ;;
+  ssh)    ssh -F "$SECRETS/ssh_config" ocr-gpu "$@" ;;
   kubeconfig)
     mkdir -p "$(dirname "$KUBECONFIG_OUT")"
     ssh -F "$SECRETS/ssh_config" ocr-gpu 'cat ~/.kube/config' > "$KUBECONFIG_OUT"
     chmod 600 "$KUBECONFIG_OUT"
     echo "export KUBECONFIG=$KUBECONFIG_OUT"
     ;;
-  *) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+  *) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

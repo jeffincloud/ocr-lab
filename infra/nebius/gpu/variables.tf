@@ -60,7 +60,7 @@ variable "repo_ref" {
 }
 
 variable "api_image" {
-  description = "When set together with frontend_image, cloud-init also runs scripts/lab-up.sh PROFILE=gpu (platform, observability, model, apps). Empty stops after K3s + GPU runtime."
+  description = "When set together with frontend_image, cloud-init also runs scripts/lab-up.sh PROFILE=gpu (platform, model, apps). Empty stops after K3s + GPU runtime."
   type        = string
   default     = ""
 }
@@ -68,4 +68,10 @@ variable "api_image" {
 variable "frontend_image" {
   type    = string
   default = ""
+}
+
+variable "install_observability" {
+  description = "Have lab-up.sh also install the observability stack."
+  type        = bool
+  default     = false
 }

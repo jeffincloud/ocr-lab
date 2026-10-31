@@ -1,5 +1,9 @@
-output "private_ip" {
-  value = local.private_ip
+output "tunnel_ip" {
+  value = local.base.tunnel_ip
+}
+
+output "public_ip" {
+  value = local.base.public_ip
 }
 
 output "state" {

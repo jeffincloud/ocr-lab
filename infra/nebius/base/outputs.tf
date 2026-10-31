@@ -7,6 +7,18 @@ output "gpu_security_group_id" {
   value = nebius_vpc_v1_security_group.gpu.id
 }
 
+output "models_disk_id" {
+  value = nebius_compute_v1_disk.models.id
+}
+
+output "public_ip_allocation_id" {
+  value = nebius_vpc_v1_allocation.gpu.id
+}
+
+output "public_ip" {
+  value = local.public_ip
+}
+
 output "ssh_user" {
   value = var.ssh_user
 }
@@ -19,16 +31,25 @@ output "secrets_dir" {
   value = local.secrets_dir
 }
 
-output "jump_public_ip" {
-  value = local.jump_ip
+output "tunnel_ip" {
+  value = local.wg_server
 }
 
-output "jump_private_ip" {
-  value = split("/", nebius_compute_v1_instance.jump.status.network_interfaces[0].ip_address.address)[0]
-}
-
-output "vpc_cidrs" {
-  value = local.vpc_cidrs
+# What the GPU VM's cloud-init needs to run the WireGuard server.
+output "wireguard_server" {
+  sensitive = true
+  value = {
+    address     = "${local.wg_server}/${local.wg_mask}"
+    port        = var.wireguard_port
+    private_key = wireguard_asymmetric_key.server.private_key
+    peers = [
+      for name, peer in local.wg_peers : {
+        name       = name
+        public_key = wireguard_asymmetric_key.peer[name].public_key
+        address    = peer.address
+      }
+    ]
+  }
 }
 
 output "wireguard_configs" {

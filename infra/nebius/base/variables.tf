@@ -23,24 +23,15 @@ variable "name" {
 }
 
 variable "ssh_user" {
-  description = "Login user created on the jump server and the GPU VM."
+  description = "Login user created on the GPU VM."
   type        = string
   default     = "lab"
 }
 
-variable "jump_platform" {
-  type    = string
-  default = "cpu-d3"
-}
-
-variable "jump_preset" {
-  type    = string
-  default = "2vcpu-8gb"
-}
-
-variable "jump_image_family" {
-  type    = string
-  default = "ubuntu24.04-driverless"
+variable "models_disk_gib" {
+  description = "Persistent disk for model weights, in multiples of 93 GiB (non-replicated disks). Qwen3.5-9B FP8 takes 14 GB."
+  type        = number
+  default     = 93
 }
 
 variable "wireguard_port" {
@@ -49,7 +40,7 @@ variable "wireguard_port" {
 }
 
 variable "wireguard_cidr" {
-  description = "Tunnel network. The jump server takes .1, peers take .10 onwards."
+  description = "Tunnel network. The GPU VM takes .1, peers take .10 onwards."
   type        = string
   default     = "10.66.0.0/24"
 }
@@ -66,8 +57,14 @@ variable "wireguard_allowed_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "public_app_cidrs" {
+  description = "CIDRs allowed to reach the app on port 80 of the public IP, e.g. [\"0.0.0.0/0\"] while testing with real traffic. Plain HTTP, so use specimens only. Empty keeps the app on the tunnel."
+  type        = list(string)
+  default     = []
+}
+
 variable "ssh_break_glass_cidrs" {
-  description = "Optional CIDRs (e.g. [\"203.0.113.7/32\"]) allowed to SSH to the jump server's public IP if the tunnel is broken. Empty keeps SSH reachable only through WireGuard."
+  description = "Optional CIDRs (e.g. [\"203.0.113.7/32\"]) allowed to SSH to the GPU VM's public IP if the tunnel is broken. Empty keeps SSH reachable only through WireGuard."
   type        = list(string)
   default     = []
 }

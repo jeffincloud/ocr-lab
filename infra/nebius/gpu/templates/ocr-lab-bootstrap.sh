@@ -20,13 +20,20 @@ if [[ ! -d "$REPO/.git" ]]; then
   git clone --branch "$REPO_REF" "$REPO_URL" "$REPO"
 fi
 
-# The API server certificate and the exported kubeconfig use the private IP,
-# which is what the WireGuard tunnel reaches.
-PRIVATE_IP=$(ip -4 route get 1.1.1.1 | awk '{for (i = 1; i < NF; i++) if ($i == "src") { print $(i + 1); exit }}')
+# The persistent model disk from ../base. Formatted only when it has no filesystem,
+# so a rebuilt VM finds the weights the previous one downloaded.
+MODELS_DISK=/dev/disk/by-id/virtio-ocr-models
+MODELS_DIR=/var/lib/ocr-lab-models
+blkid "$MODELS_DISK" >/dev/null 2>&1 || mkfs.ext4 -q -L ocr-models "$MODELS_DISK"
+mkdir -p "$MODELS_DIR"
+grep -q "$MODELS_DIR" /etc/fstab || echo "$MODELS_DISK $MODELS_DIR ext4 defaults,nofail 0 2" >> /etc/fstab
+mountpoint -q "$MODELS_DIR" || mount "$MODELS_DIR"
 
+# The API server certificate and the exported kubeconfig use the tunnel address,
+# which is how the laptop reaches this VM.
 if [[ ! -f "$STATE/k3s.done" ]]; then
-  log "K3s + nvidia-container-toolkit (private IP ${PRIVATE_IP})"
-  PUBLIC_IP="$PRIVATE_IP" bash "$REPO/scripts/bootstrap.sh"
+  log "K3s + nvidia-container-toolkit (tunnel IP ${TUNNEL_IP})"
+  PUBLIC_IP="$TUNNEL_IP" bash "$REPO/scripts/bootstrap.sh"
   touch "$STATE/k3s.done"
 fi
 
@@ -40,14 +47,14 @@ fi
 
 if [[ -z "${API_IMAGE}" || -z "${FRONTEND_IMAGE}" ]]; then
   log "API_IMAGE/FRONTEND_IMAGE not set: K3s is ready, skipping lab-up.sh."
-  log "Run it later from your laptop: VM_IP=${PRIVATE_IP} SSH_USER=${SSH_USER} SKIP_BOOTSTRAP=1 ./scripts/provision.sh"
+  log "Run it later from your laptop: VM_IP=${TUNNEL_IP} SSH_USER=${SSH_USER} SKIP_BOOTSTRAP=1 ./scripts/provision.sh"
   exit 0
 fi
 
 if [[ ! -f "$STATE/lab-up.done" ]]; then
   log "scripts/lab-up.sh PROFILE=gpu"
   cd "$REPO"
-  KUBECONFIG=/etc/rancher/k3s/k3s.yaml PROFILE=gpu \
+  KUBECONFIG=/etc/rancher/k3s/k3s.yaml PROFILE=gpu SKIP_OBSERVABILITY="$SKIP_OBSERVABILITY" \
     API_IMAGE="$API_IMAGE" FRONTEND_IMAGE="$FRONTEND_IMAGE" ./scripts/lab-up.sh
   touch "$STATE/lab-up.done"
 fi

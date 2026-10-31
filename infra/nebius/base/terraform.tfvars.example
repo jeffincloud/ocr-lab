@@ -5,3 +5,4 @@ nebius_profile = "default"          # `nebius profile list`
 # wireguard_peers         = ["laptop"]
 # wireguard_allowed_cidrs = ["203.0.113.7/32"]   # your IP, if it is stable
 # ssh_break_glass_cidrs   = []
+# public_app_cidrs        = ["0.0.0.0/0"]        # expose the app on port 80 while testing
