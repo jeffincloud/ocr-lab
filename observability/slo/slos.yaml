@@ -17,7 +17,9 @@ slos:
     layer: application
     description: Extraction requests that did not fail on our side (5xx). Bad uploads (4xx) are excluded.
     objective: 99.5
-    bad: sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[{{window}}]))
+    # "or vector(0)": with no failures this series doesn't exist, and without it the
+    # SLO panels would go blank exactly when everything is healthy.
+    bad: sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[{{window}}])) or vector(0)
     total: sum(rate(ocr_extractions_total{outcome!="bad_request"}[{{window}}]))
 
   - name: ocr-latency
@@ -35,7 +37,7 @@ slos:
       Extractions whose MRZ passes ICAO 9303 check digits. Label-free ground
       truth: a wrong character in the MRZ almost always breaks a check digit.
     objective: 98
-    bad: sum(rate(ocr_mrz_checks_total{result!="valid"}[{{window}}]))
+    bad: sum(rate(ocr_mrz_checks_total{result!="valid"}[{{window}}])) or vector(0)
     total: sum(rate(ocr_mrz_checks_total[{{window}}]))
 
   - name: ocr-visual-agreement
@@ -45,7 +47,7 @@ slos:
       validated MRZ. Catches visual-reading regressions that the MRZ override
       would otherwise hide.
     objective: 97
-    bad: sum(rate(ocr_mrz_field_agreement_total{agree="false"}[{{window}}]))
+    bad: sum(rate(ocr_mrz_field_agreement_total{agree="false"}[{{window}}])) or vector(0)
     total: sum(rate(ocr_mrz_field_agreement_total[{{window}}]))
 
   - name: inference-ttft

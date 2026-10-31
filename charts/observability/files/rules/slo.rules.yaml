@@ -5,7 +5,7 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[5m])))
+      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[5m])) or vector(0))
       /
       (sum(rate(ocr_extractions_total{outcome!="bad_request"}[5m])))
     labels: &id001
@@ -13,37 +13,37 @@ groups:
       layer: application
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[30m])))
+      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[30m])) or vector(0))
       /
       (sum(rate(ocr_extractions_total{outcome!="bad_request"}[30m])))
     labels: *id001
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1h])))
+      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1h])) or vector(0))
       /
       (sum(rate(ocr_extractions_total{outcome!="bad_request"}[1h])))
     labels: *id001
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[2h])))
+      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[2h])) or vector(0))
       /
       (sum(rate(ocr_extractions_total{outcome!="bad_request"}[2h])))
     labels: *id001
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[6h])))
+      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[6h])) or vector(0))
       /
       (sum(rate(ocr_extractions_total{outcome!="bad_request"}[6h])))
     labels: *id001
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1d])))
+      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1d])) or vector(0))
       /
       (sum(rate(ocr_extractions_total{outcome!="bad_request"}[1d])))
     labels: *id001
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[3d])))
+      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[3d])) or vector(0))
       /
       (sum(rate(ocr_extractions_total{outcome!="bad_request"}[3d])))
     labels: *id001
@@ -255,7 +255,7 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[5m])))
+      (sum(rate(ocr_mrz_checks_total{result!="valid"}[5m])) or vector(0))
       /
       (sum(rate(ocr_mrz_checks_total[5m])))
     labels: &id003
@@ -263,37 +263,37 @@ groups:
       layer: quality
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[30m])))
+      (sum(rate(ocr_mrz_checks_total{result!="valid"}[30m])) or vector(0))
       /
       (sum(rate(ocr_mrz_checks_total[30m])))
     labels: *id003
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[1h])))
+      (sum(rate(ocr_mrz_checks_total{result!="valid"}[1h])) or vector(0))
       /
       (sum(rate(ocr_mrz_checks_total[1h])))
     labels: *id003
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[2h])))
+      (sum(rate(ocr_mrz_checks_total{result!="valid"}[2h])) or vector(0))
       /
       (sum(rate(ocr_mrz_checks_total[2h])))
     labels: *id003
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[6h])))
+      (sum(rate(ocr_mrz_checks_total{result!="valid"}[6h])) or vector(0))
       /
       (sum(rate(ocr_mrz_checks_total[6h])))
     labels: *id003
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[1d])))
+      (sum(rate(ocr_mrz_checks_total{result!="valid"}[1d])) or vector(0))
       /
       (sum(rate(ocr_mrz_checks_total[1d])))
     labels: *id003
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[3d])))
+      (sum(rate(ocr_mrz_checks_total{result!="valid"}[3d])) or vector(0))
       /
       (sum(rate(ocr_mrz_checks_total[3d])))
     labels: *id003
@@ -384,7 +384,7 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[5m])))
+      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[5m])) or vector(0))
       /
       (sum(rate(ocr_mrz_field_agreement_total[5m])))
     labels: &id004
@@ -392,37 +392,37 @@ groups:
       layer: quality
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[30m])))
+      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[30m])) or vector(0))
       /
       (sum(rate(ocr_mrz_field_agreement_total[30m])))
     labels: *id004
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1h])))
+      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1h])) or vector(0))
       /
       (sum(rate(ocr_mrz_field_agreement_total[1h])))
     labels: *id004
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[2h])))
+      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[2h])) or vector(0))
       /
       (sum(rate(ocr_mrz_field_agreement_total[2h])))
     labels: *id004
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[6h])))
+      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[6h])) or vector(0))
       /
       (sum(rate(ocr_mrz_field_agreement_total[6h])))
     labels: *id004
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1d])))
+      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1d])) or vector(0))
       /
       (sum(rate(ocr_mrz_field_agreement_total[1d])))
     labels: *id004
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[3d])))
+      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[3d])) or vector(0))
       /
       (sum(rate(ocr_mrz_field_agreement_total[3d])))
     labels: *id004
