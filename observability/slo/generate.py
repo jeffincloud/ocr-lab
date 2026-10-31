@@ -42,14 +42,17 @@ def build(spec: dict) -> dict:
         sli_rules = [
             {
                 "record": f"slo:sli_error:ratio_rate{w}",
-                "expr": f"({_expr(slo['bad'], w)})\n/\n({_expr(slo['total'], w)})",
+                # ">= 0" drops the 0/0 = NaN of a window with no traffic.
+                "expr": f"(({_expr(slo['bad'], w)})\n/\n({_expr(slo['total'], w)})) >= 0",
                 "labels": labels,
             }
             for w in WINDOWS
         ]
+        # One NaN makes avg_over_time NaN for its whole range, which would blank the
+        # SLO for 28 days after a quiet moment, so the average skips any.
         sli_rules.append({
             "record": f"slo:sli_error:ratio_rate{period}",
-            "expr": f"avg_over_time(slo:sli_error:ratio_rate5m{{slo=\"{name}\"}}[{period}])",
+            "expr": f"avg_over_time((slo:sli_error:ratio_rate5m{{slo=\"{name}\"}} >= 0)[{period}:5m])",
             "labels": labels,
         })
         meta_rules = [

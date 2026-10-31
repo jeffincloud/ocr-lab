@@ -5,50 +5,50 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[5m])) or vector(0))
+      ((sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[5m])) or vector(0))
       /
-      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[5m])))
+      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[5m])))) >= 0
     labels: &id001
       slo: ocr-availability
       layer: application
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[30m])) or vector(0))
+      ((sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[30m])) or vector(0))
       /
-      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[30m])))
+      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[30m])))) >= 0
     labels: *id001
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1h])) or vector(0))
+      ((sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1h])) or vector(0))
       /
-      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[1h])))
+      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[1h])))) >= 0
     labels: *id001
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[2h])) or vector(0))
+      ((sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[2h])) or vector(0))
       /
-      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[2h])))
+      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[2h])))) >= 0
     labels: *id001
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[6h])) or vector(0))
+      ((sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[6h])) or vector(0))
       /
-      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[6h])))
+      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[6h])))) >= 0
     labels: *id001
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1d])) or vector(0))
+      ((sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[1d])) or vector(0))
       /
-      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[1d])))
+      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[1d])))) >= 0
     labels: *id001
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[3d])) or vector(0))
+      ((sum(rate(ocr_extractions_total{outcome=~"upstream_.*|model_output_error|internal_error"}[3d])) or vector(0))
       /
-      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[3d])))
+      (sum(rate(ocr_extractions_total{outcome!="bad_request"}[3d])))) >= 0
     labels: *id001
   - record: slo:sli_error:ratio_rate28d
-    expr: avg_over_time(slo:sli_error:ratio_rate5m{slo="ocr-availability"}[28d])
+    expr: avg_over_time((slo:sli_error:ratio_rate5m{slo="ocr-availability"} >= 0)[28d:5m])
     labels: *id001
 - name: slo-meta-ocr-availability
   interval: 30s
@@ -130,50 +130,50 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[5m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[5m])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[5m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[5m])))
       /
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[5m])))
+      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[5m])))) >= 0
     labels: &id002
       slo: ocr-latency
       layer: application
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[30m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[30m])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[30m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[30m])))
       /
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[30m])))
+      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[30m])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[1h])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[1h])))
       /
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1h])))
+      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1h])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[2h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[2h])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[2h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[2h])))
       /
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[2h])))
+      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[2h])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[6h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[6h])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[6h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[6h])))
       /
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[6h])))
+      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[6h])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[1d])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[1d])))
       /
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1d])))
+      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1d])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[3d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[3d])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[3d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[3d])))
       /
-      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[3d])))
+      (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[3d])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate28d
-    expr: avg_over_time(slo:sli_error:ratio_rate5m{slo="ocr-latency"}[28d])
+    expr: avg_over_time((slo:sli_error:ratio_rate5m{slo="ocr-latency"} >= 0)[28d:5m])
     labels: *id002
 - name: slo-meta-ocr-latency
   interval: 30s
@@ -255,50 +255,50 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[5m])) or vector(0))
+      ((sum(rate(ocr_mrz_checks_total{result!="valid"}[5m])) or vector(0))
       /
-      (sum(rate(ocr_mrz_checks_total[5m])))
+      (sum(rate(ocr_mrz_checks_total[5m])))) >= 0
     labels: &id003
       slo: ocr-mrz-validity
       layer: quality
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[30m])) or vector(0))
+      ((sum(rate(ocr_mrz_checks_total{result!="valid"}[30m])) or vector(0))
       /
-      (sum(rate(ocr_mrz_checks_total[30m])))
+      (sum(rate(ocr_mrz_checks_total[30m])))) >= 0
     labels: *id003
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[1h])) or vector(0))
+      ((sum(rate(ocr_mrz_checks_total{result!="valid"}[1h])) or vector(0))
       /
-      (sum(rate(ocr_mrz_checks_total[1h])))
+      (sum(rate(ocr_mrz_checks_total[1h])))) >= 0
     labels: *id003
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[2h])) or vector(0))
+      ((sum(rate(ocr_mrz_checks_total{result!="valid"}[2h])) or vector(0))
       /
-      (sum(rate(ocr_mrz_checks_total[2h])))
+      (sum(rate(ocr_mrz_checks_total[2h])))) >= 0
     labels: *id003
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[6h])) or vector(0))
+      ((sum(rate(ocr_mrz_checks_total{result!="valid"}[6h])) or vector(0))
       /
-      (sum(rate(ocr_mrz_checks_total[6h])))
+      (sum(rate(ocr_mrz_checks_total[6h])))) >= 0
     labels: *id003
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[1d])) or vector(0))
+      ((sum(rate(ocr_mrz_checks_total{result!="valid"}[1d])) or vector(0))
       /
-      (sum(rate(ocr_mrz_checks_total[1d])))
+      (sum(rate(ocr_mrz_checks_total[1d])))) >= 0
     labels: *id003
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(ocr_mrz_checks_total{result!="valid"}[3d])) or vector(0))
+      ((sum(rate(ocr_mrz_checks_total{result!="valid"}[3d])) or vector(0))
       /
-      (sum(rate(ocr_mrz_checks_total[3d])))
+      (sum(rate(ocr_mrz_checks_total[3d])))) >= 0
     labels: *id003
   - record: slo:sli_error:ratio_rate28d
-    expr: avg_over_time(slo:sli_error:ratio_rate5m{slo="ocr-mrz-validity"}[28d])
+    expr: avg_over_time((slo:sli_error:ratio_rate5m{slo="ocr-mrz-validity"} >= 0)[28d:5m])
     labels: *id003
 - name: slo-meta-ocr-mrz-validity
   interval: 30s
@@ -384,50 +384,50 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[5m])) or vector(0))
+      ((sum(rate(ocr_mrz_field_agreement_total{agree="false"}[5m])) or vector(0))
       /
-      (sum(rate(ocr_mrz_field_agreement_total[5m])))
+      (sum(rate(ocr_mrz_field_agreement_total[5m])))) >= 0
     labels: &id004
       slo: ocr-visual-agreement
       layer: quality
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[30m])) or vector(0))
+      ((sum(rate(ocr_mrz_field_agreement_total{agree="false"}[30m])) or vector(0))
       /
-      (sum(rate(ocr_mrz_field_agreement_total[30m])))
+      (sum(rate(ocr_mrz_field_agreement_total[30m])))) >= 0
     labels: *id004
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1h])) or vector(0))
+      ((sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1h])) or vector(0))
       /
-      (sum(rate(ocr_mrz_field_agreement_total[1h])))
+      (sum(rate(ocr_mrz_field_agreement_total[1h])))) >= 0
     labels: *id004
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[2h])) or vector(0))
+      ((sum(rate(ocr_mrz_field_agreement_total{agree="false"}[2h])) or vector(0))
       /
-      (sum(rate(ocr_mrz_field_agreement_total[2h])))
+      (sum(rate(ocr_mrz_field_agreement_total[2h])))) >= 0
     labels: *id004
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[6h])) or vector(0))
+      ((sum(rate(ocr_mrz_field_agreement_total{agree="false"}[6h])) or vector(0))
       /
-      (sum(rate(ocr_mrz_field_agreement_total[6h])))
+      (sum(rate(ocr_mrz_field_agreement_total[6h])))) >= 0
     labels: *id004
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1d])) or vector(0))
+      ((sum(rate(ocr_mrz_field_agreement_total{agree="false"}[1d])) or vector(0))
       /
-      (sum(rate(ocr_mrz_field_agreement_total[1d])))
+      (sum(rate(ocr_mrz_field_agreement_total[1d])))) >= 0
     labels: *id004
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(ocr_mrz_field_agreement_total{agree="false"}[3d])) or vector(0))
+      ((sum(rate(ocr_mrz_field_agreement_total{agree="false"}[3d])) or vector(0))
       /
-      (sum(rate(ocr_mrz_field_agreement_total[3d])))
+      (sum(rate(ocr_mrz_field_agreement_total[3d])))) >= 0
     labels: *id004
   - record: slo:sli_error:ratio_rate28d
-    expr: avg_over_time(slo:sli_error:ratio_rate5m{slo="ocr-visual-agreement"}[28d])
+    expr: avg_over_time((slo:sli_error:ratio_rate5m{slo="ocr-visual-agreement"} >= 0)[28d:5m])
     labels: *id004
 - name: slo-meta-ocr-visual-agreement
   interval: 30s
@@ -513,50 +513,50 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      (sum(rate(vllm:time_to_first_token_seconds_count[5m])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[5m])))
+      ((sum(rate(vllm:time_to_first_token_seconds_count[5m])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[5m])))
       /
-      (sum(rate(vllm:time_to_first_token_seconds_count[5m])))
+      (sum(rate(vllm:time_to_first_token_seconds_count[5m])))) >= 0
     labels: &id005
       slo: inference-ttft
       layer: inference
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      (sum(rate(vllm:time_to_first_token_seconds_count[30m])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[30m])))
+      ((sum(rate(vllm:time_to_first_token_seconds_count[30m])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[30m])))
       /
-      (sum(rate(vllm:time_to_first_token_seconds_count[30m])))
+      (sum(rate(vllm:time_to_first_token_seconds_count[30m])))) >= 0
     labels: *id005
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      (sum(rate(vllm:time_to_first_token_seconds_count[1h])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[1h])))
+      ((sum(rate(vllm:time_to_first_token_seconds_count[1h])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[1h])))
       /
-      (sum(rate(vllm:time_to_first_token_seconds_count[1h])))
+      (sum(rate(vllm:time_to_first_token_seconds_count[1h])))) >= 0
     labels: *id005
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      (sum(rate(vllm:time_to_first_token_seconds_count[2h])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[2h])))
+      ((sum(rate(vllm:time_to_first_token_seconds_count[2h])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[2h])))
       /
-      (sum(rate(vllm:time_to_first_token_seconds_count[2h])))
+      (sum(rate(vllm:time_to_first_token_seconds_count[2h])))) >= 0
     labels: *id005
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      (sum(rate(vllm:time_to_first_token_seconds_count[6h])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[6h])))
+      ((sum(rate(vllm:time_to_first_token_seconds_count[6h])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[6h])))
       /
-      (sum(rate(vllm:time_to_first_token_seconds_count[6h])))
+      (sum(rate(vllm:time_to_first_token_seconds_count[6h])))) >= 0
     labels: *id005
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      (sum(rate(vllm:time_to_first_token_seconds_count[1d])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[1d])))
+      ((sum(rate(vllm:time_to_first_token_seconds_count[1d])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[1d])))
       /
-      (sum(rate(vllm:time_to_first_token_seconds_count[1d])))
+      (sum(rate(vllm:time_to_first_token_seconds_count[1d])))) >= 0
     labels: *id005
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      (sum(rate(vllm:time_to_first_token_seconds_count[3d])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[3d])))
+      ((sum(rate(vllm:time_to_first_token_seconds_count[3d])) - sum(rate(vllm:time_to_first_token_seconds_bucket{le=~"2.5"}[3d])))
       /
-      (sum(rate(vllm:time_to_first_token_seconds_count[3d])))
+      (sum(rate(vllm:time_to_first_token_seconds_count[3d])))) >= 0
     labels: *id005
   - record: slo:sli_error:ratio_rate28d
-    expr: avg_over_time(slo:sli_error:ratio_rate5m{slo="inference-ttft"}[28d])
+    expr: avg_over_time((slo:sli_error:ratio_rate5m{slo="inference-ttft"} >= 0)[28d:5m])
     labels: *id005
 - name: slo-meta-inference-ttft
   interval: 30s
