@@ -1,0 +1,33 @@
+{{- if ne .Values.mode "mock" }}
+# The node directory holding the model weights. Static binding: no provisioner, so
+# the data is never deleted with the claim.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ .Release.Namespace }}-{{ .Values.weights.claim }}
+spec:
+  capacity:
+    storage: {{ .Values.weights.size }}
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  claimRef:
+    namespace: {{ .Release.Namespace }}
+    name: {{ .Values.weights.claim }}
+  hostPath:
+    path: {{ .Values.weights.hostPath }}
+    type: Directory
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.weights.claim }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: {{ .Release.Namespace }}-{{ .Values.weights.claim }}
+  resources:
+    requests:
+      storage: {{ .Values.weights.size }}
+{{- end }}

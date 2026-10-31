@@ -32,14 +32,22 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
   ubuntu-drivers install --gpgpu
 fi
 
-# 3. nvidia-container-toolkit (must be installed BEFORE K3s)
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-  | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -sL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-  > /etc/apt/sources.list.d/nvidia-container-toolkit.list
-apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-container-toolkit
+# 3. nvidia-container-toolkit (must be installed BEFORE K3s). GPU images such as
+#    Nebius's ubuntu24.04-cuda13.0 ship a version newer than NVIDIA's stable repo,
+#    where installing from that repo would be a refused downgrade.
+if ! command -v nvidia-ctk >/dev/null 2>&1; then
+  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+    | gpg --batch --yes --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  curl -sL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+    | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+    > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-container-toolkit
+fi
+
+# Model weights (charts/model-llmd weights.hostPath), writable by the download
+# container's UID. On Nebius a persistent disk is already mounted here.
+install -d -o 1000 -g 1000 /var/lib/ocr-lab-models
 
 # 4. Pin the kernel. The TensorDock NVIDIA-570 image ships the driver via
 #    a .run installer (modules in /lib/modules/$(uname -r)/kernel/drivers/video/),

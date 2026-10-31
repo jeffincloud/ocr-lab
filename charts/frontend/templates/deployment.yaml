@@ -25,7 +25,7 @@ spec:
               protocol: TCP
           env:
             - name: API_HOST
-              value: {{ .Values.api.host | quote }}
+              value: {{ printf "%s.%s.svc.cluster.local" .Values.api.host .Release.Namespace | quote }}
             - name: API_PORT
               value: {{ .Values.api.port | quote }}
           readinessProbe:

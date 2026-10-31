@@ -10,9 +10,15 @@ metadata:
     ocr-lab/mode: {{ .Values.mode }}
 spec:
   model:
+    {{- if $mock }}
     uri: {{ .Values.model.uri }}
+    {{- else }}
+    uri: pvc://{{ .Values.weights.claim }}/{{ .Values.weights.subPath }}
+    {{- end }}
     name: {{ .Values.model.name }}
   replicas: {{ .Values.replicas }}
+  rolloutStrategy:
+    {{- toYaml .Values.rolloutStrategy | nindent 4 }}
   {{- if $mock }}
   # The mock needs no weights; skip the download init container.
   storageInitializer:
@@ -35,6 +41,26 @@ spec:
     {{- with .Values.runtimeClassName }}
     runtimeClassName: {{ . }}
     {{- end }}
+    volumes:
+      - name: model-weights
+        persistentVolumeClaim:
+          claimName: {{ .Values.weights.claim }}
+    initContainers:
+      - name: fetch-weights
+        image: {{ .Values.weights.downloaderImage }}
+        args:
+          - {{ .Values.model.uri }}
+          - /weights/{{ .Values.weights.subPath }}
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          capabilities: {drop: ["ALL"]}
+        volumeMounts:
+          - {name: model-weights, mountPath: /weights}
+        resources:
+          {{- toYaml .Values.weights.resources | nindent 10 }}
     {{- end }}
     containers:
       - name: main
@@ -60,6 +86,12 @@ spec:
           {{- toYaml .Values.mock.resources | nindent 10 }}
         {{- else }}
         image: {{ .Values.image }}
+        # KServe's template sets runAsNonRoot, but the upstream vLLM image has no
+        # USER, so the kubelet refuses to start it without an explicit UID. HOME,
+        # /tmp and the model directories are writable volumes KServe mounts.
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
         env:
           - name: VLLM_ADDITIONAL_ARGS
             value: {{ .Values.vllmArgs | quote }}

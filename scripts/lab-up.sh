@@ -82,10 +82,18 @@ fi
 
 # 3. Model --------------------------------------------------------------------------
 log "3/5 Model: LLMInferenceService ${MODEL_NAME} (${PROFILE})"
+# The key on the model's route (charts/model-llmd modelAuth), created once and read
+# by both the gateway and the API.
+if ! kubectl -n "$NS" get secret model-api-key >/dev/null 2>&1; then
+  kubectl -n "$NS" create secret generic model-api-key --from-literal=api-key="$(openssl rand -hex 32)"
+fi
 helm upgrade --install model "$REPO_ROOT/charts/model-llmd" -n "$NS" \
-  --set "model.name=${MODEL_NAME}" "${MODEL_VALUES[@]}"
+  --set "model.name=${MODEL_NAME}" ${MODEL_VALUES[@]+"${MODEL_VALUES[@]}"}
 log "Waiting for ${MODEL_NAME} to be Ready (first GPU start downloads ~14 GB)..."
 kubectl -n "$NS" wait "llminferenceservice/${MODEL_NAME}" --for=condition=Ready --timeout="${MODEL_TIMEOUT:-30m}"
+# With maxUnavailable: 1 a Deployment counts as Available with zero pods, so Ready
+# can be true while the model is still downloading. Wait for the pod itself.
+kubectl -n "$NS" rollout status "deployment/${MODEL_NAME}-kserve" --timeout="${MODEL_TIMEOUT:-30m}"
 
 # The API calls the model through the Gateway, inside the cluster: Envoy's own
 # Service, then the route KServe created (/<namespace>/<name>/v1/...).

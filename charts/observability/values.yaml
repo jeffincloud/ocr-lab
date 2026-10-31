@@ -24,7 +24,7 @@ dashboards:
 #   honorLabels  the target reports about other pods (its pod/namespace labels win)
 scrape:
   # vLLM pods of the LLMInferenceService (charts/model-llmd), and the mock in
-  # mode=mock. HTTPS with KServe's self-signed cert by default.
+  # mode=mock. Set scheme: https if KServe's global EnableTLS is on.
   vllm:
     enabled: true
     namespace: default
@@ -32,7 +32,7 @@ scrape:
       app.kubernetes.io/part-of: llminferenceservice
       kserve.io/component: workload
     port: 8000
-    scheme: https
+    scheme: http
   # llm-d endpoint picker (EPP / inference scheduler): routing decisions,
   # scheduler latency, the pool state it sees. Plain HTTP, but /metrics wants a
   # bearer token with RBAC on the /metrics URL; the collector sends its own.

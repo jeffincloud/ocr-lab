@@ -1,0 +1,22 @@
+{{- if .Values.modelAuth.enabled }}
+# The model route shares the Gateway's port 80 with the app, so anyone who can reach
+# the app could call the model directly. Only requests with the key pass; the API
+# has it, and "/" and "/api" stay open. scripts/lab-up.sh creates the Secret. Envoy
+# strips "Bearer " from the header, so the Secret holds the bare key.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: {{ .Values.model.name }}-api-key
+  namespace: {{ .Release.Namespace }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: {{ .Values.model.name }}-kserve-route
+  apiKeyAuth:
+    credentialRefs:
+      - kind: Secret
+        name: {{ .Values.modelAuth.secret }}
+    extractFrom:
+      - headers: [authorization]
+{{- end }}

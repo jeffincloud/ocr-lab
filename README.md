@@ -44,7 +44,7 @@ observability/    Stack install (Prometheus, Grafana, Tempo, Loki, Collector, DC
                   local docker-compose stack, SLOs and dashboards as code
 loadtest/         k6 (many users, scored against ground truth) + GuideLLM (engine)
 infra/
-  nebius/         Terraform: preemptible L40S VM + WireGuard jump server, cloud-init bootstrap
+  nebius/         Terraform: preemptible L40S VM behind WireGuard, cloud-init bootstrap
 tools/
   passport-gen/   Synthetic passports with ground truth
   pii-probe/      Sends leaky telemetry to prove the collector's PII policy
@@ -127,7 +127,7 @@ correlation, PII policy, cardinality budget, SLOs, cost, cold start) and
 - **Qwen3.5-9B (FP8, `RedHatAI/Qwen3.5-9B-FP8-dynamic`)** — the successor of
   Qwen3-VL with vision built in; scores above Qwen3-VL-30B-A3B on OCRBench. The
   FP8 build is 14 GB, which leaves KV-cache room on a 24 GB GPU. Thinking mode
-  is switched off for extraction.
+  is on, with a larger token limit so the reasoning can't cut off the JSON.
 - **vLLM `v0.31.0`** — the release llm-d v1.0 ships; Qwen3.5 needs ≥ 0.17.
   Includes the OpenTelemetry packages, so engine tracing needs no custom image.
 - **KServe v0.21** — latest release; LLMInferenceService with the llm-d

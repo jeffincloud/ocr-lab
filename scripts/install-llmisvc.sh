@@ -16,8 +16,6 @@
 # and expose the frontend through the same Gateway (charts/frontend
 # httpRoute.enabled=true). One Gateway API entry point for app and model.
 #
-# NOTE: not yet run on the lab's GPU node.
-#
 #   KUBECONFIG=~/.kube/ocr-lab.config ./scripts/install-llmisvc.sh
 set -euo pipefail
 
@@ -28,6 +26,23 @@ trap 'rm -rf "$TMP"' EXIT
 
 log() { echo "[install-llmisvc] $*"; }
 command -v kubectl >/dev/null || { echo "missing: kubectl" >&2; exit 1; }
+
+# KServe v0.21.0's generated quick-install scripts call this function and pass
+# GIE_CRDS, but the generator leaves both out (they live in the part of
+# hack/setup/infra/manage.kserve-helm.sh it doesn't copy), so the llmisvc install
+# dies with "command not found". Exported so the child scripts inherit it. It marks
+# the InferencePool CRDs installed earlier as owned by the chart that bundles them.
+adopt_existing_crds_for_release() {
+  local crd
+  for crd in inferencemodelrewrites.llm-d.ai inferenceobjectives.llm-d.ai \
+    inferencepools.inference.networking.k8s.io inferencepools.inference.networking.x-k8s.io; do
+    if kubectl get crd "$crd" >/dev/null 2>&1; then
+      kubectl label crd "$crd" app.kubernetes.io/managed-by=Helm --overwrite
+      kubectl annotate crd "$crd" "meta.helm.sh/release-name=$1" "meta.helm.sh/release-namespace=$2" --overwrite
+    fi
+  done
+}
+export -f adopt_existing_crds_for_release
 
 for script in kserve-standard-mode-full-install-helm.sh llmisvc-full-install-helm.sh; do
   log "Fetching ${script} (${KSERVE_VERSION})..."

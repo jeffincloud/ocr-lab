@@ -23,7 +23,33 @@ model:
   # Served model name and LLMInferenceService name; the API sends this as "model".
   name: qwen3-5-9b
 
+# Weights live on the node, not in the pod, so a new pod doesn't download 14 GB
+# again. KServe's own hf:// download goes to a volume that dies with the pod (and
+# its 1Gi memory limit gets it OOMKilled). Here the fetch-weights init container
+# downloads only what is missing, and vLLM mounts the result through pvc://.
+# On Nebius hostPath is a disk that also survives deleting the VM (infra/nebius).
+weights:
+  hostPath: /var/lib/ocr-lab-models
+  subPath: qwen3.5-9b-fp8
+  claim: ocr-model-weights
+  size: 50Gi
+  downloaderImage: kserve/storage-initializer:v0.21.0
+  resources:
+    limits: {cpu: "4", memory: 8Gi}
+    requests: {cpu: 200m, memory: 512Mi}
+
+# Require an API key on the model's route (see templates/model-auth.yaml).
+modelAuth:
+  enabled: true
+  secret: model-api-key
+
 replicas: 1
+
+# One GPU: a surge pod would wait forever for the GPU the old pod still holds,
+# even when the old pod is crash-looping. Replace pods instead of surging.
+rolloutStrategy:
+  maxSurge: 0
+  maxUnavailable: 1
 
 # vLLM v0.31.0 is the release llm-d v1.0 ships, and the first KServe template
 # images (llm-d-cuda:v0.9.0) predate Qwen3.5 support (vLLM >= 0.17). Built for
@@ -33,9 +59,9 @@ image: docker.io/vllm/vllm-openai:v0.31.0
 
 # Extra vLLM flags (KServe passes them via VLLM_ADDITIONAL_ARGS, through a
 # bash eval: single-quote any JSON).
-#   --default-chat-template-kwargs  Qwen3.5 "thinks" by default; extraction
-#                                   doesn't need it (the API also sends this).
-#   --reasoning-parser qwen3        keeps any thinking out of message.content.
+#   --default-chat-template-kwargs  Thinking on, which costs tokens and latency
+#                                   per extraction (the API also sends this).
+#   --reasoning-parser qwen3        keeps the thinking out of message.content.
 #   --limit-mm-per-prompt           one image per request, no video.
 #   --max-model-len 16384           ample for one passport image + prompt + JSON;
 #                                   leaves KV cache headroom on 24 GB.
@@ -43,7 +69,7 @@ vllmArgs: >-
   --max-model-len=16384
   --gpu-memory-utilization=0.90
   --reasoning-parser=qwen3
-  --default-chat-template-kwargs='{"enable_thinking":false}'
+  --default-chat-template-kwargs='{"enable_thinking":true}'
   --limit-mm-per-prompt='{"image":1,"video":0}'
   --enable-prefix-caching
 
@@ -63,9 +89,10 @@ resources:
 
 runtimeClassName: nvidia
 
-# KServe serves the model server over TLS (self-signed) when its global
-# EnableTLS is on (the default install). Probes and scraping follow this.
-tls: true
+# Must match KServe's global EnableTLS, which is off in the v0.21 quick install.
+# Turn it on here too if you enable it there (self-signed certificates, HTTPS
+# probes); charts/observability scrape.vllm.scheme follows the same setting.
+tls: false
 
 # Used when mode=mock.
 mock:

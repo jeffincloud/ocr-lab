@@ -29,7 +29,7 @@ with a real model.
 Deployed two ways:
 
 - by `charts/model-llmd` with `values-mock.yaml`: KServe's LLMInferenceService runs it in place of
-  vLLM (port 8000, TLS, non-root, no model download), so the Envoy Gateway → llm-d EPP → replica
+  vLLM (port 8000, non-root, no model download), so the Envoy Gateway → llm-d EPP → replica
   path is real and only the engine is fake. It exports `vllm:cache_config_info` and zero-valued
   gauges from start-up because the EPP reads them, and accepts KServe's `/<ns>/<name>/v1/...` paths;
 - by `charts/mock-model` as a plain Deployment (no KServe), or by `observability/local/compose.yaml`.

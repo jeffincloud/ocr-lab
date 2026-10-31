@@ -58,4 +58,5 @@ TARGET=http://<predictor-or-gateway> ./loadtest/guidellm/run.sh sweep
 ```
 
 Sends the same prompt + image the API sends. Not yet validated end to end against the vision
-dataset; try it on the mock model first.
+dataset; try it on the mock model first. The model's route on the Gateway requires the key in the
+`model-api-key` Secret (`charts/model-llmd` `modelAuth`).
