@@ -94,8 +94,8 @@ and NVIDIA driver ≥ 580 (vLLM v0.31 is built for CUDA 13.0):
 
 ```bash
 VM_IP=<your-vm-ip> SSH_USER=<ssh-user> \
-API_IMAGE=ghcr.io/<you>/ocr-lab-api:0.2.0 \
-FRONTEND_IMAGE=ghcr.io/<you>/ocr-lab-frontend:0.2.0 \
+API_IMAGE=ghcr.io/<you>/ocr-lab/api:0.2.0 \
+FRONTEND_IMAGE=ghcr.io/<you>/ocr-lab/frontend:0.2.0 \
 ./scripts/provision.sh
 ```
 

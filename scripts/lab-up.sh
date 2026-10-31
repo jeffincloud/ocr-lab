@@ -13,8 +13,8 @@
 #
 #   ./scripts/lab-up.sh                              # PROFILE=local
 #   PROFILE=gpu KUBECONFIG=~/.kube/ocr-lab.config \
-#     API_IMAGE=ghcr.io/<you>/ocr-lab-api:0.2.0 \
-#     FRONTEND_IMAGE=ghcr.io/<you>/ocr-lab-frontend:0.2.0 ./scripts/lab-up.sh
+#     API_IMAGE=ghcr.io/<you>/ocr-lab/api:0.2.0 \
+#     FRONTEND_IMAGE=ghcr.io/<you>/ocr-lab/frontend:0.2.0 ./scripts/lab-up.sh
 #
 # Needs: kubectl, helm, docker (local: kind). Idempotent; SKIP_PLATFORM=true
 # skips the KServe/llm-d install and SKIP_OBSERVABILITY=true the monitoring

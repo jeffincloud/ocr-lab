@@ -6,5 +6,5 @@ nebius_profile = "default"
 # preemptible = true
 
 # Set both to have cloud-init run scripts/lab-up.sh PROFILE=gpu on boot.
-# api_image      = "ghcr.io/jeffincloud/ocr-lab-api:0.2.0"
-# frontend_image = "ghcr.io/jeffincloud/ocr-lab-frontend:0.2.0"
+# api_image      = "ghcr.io/jeffincloud/ocr-lab/api:0.2.0"
+# frontend_image = "ghcr.io/jeffincloud/ocr-lab/frontend:0.2.0"

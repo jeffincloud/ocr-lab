@@ -18,8 +18,8 @@
 #   VM_IP           required — public IP of the GPU VM
 #   SSH_USER        default: user
 #   KUBECONFIG_OUT  default: ~/.kube/ocr-lab.config
-#   API_IMAGE       default: ghcr.io/REPLACE_ME/ocr-lab-api:0.1.0
-#   FRONTEND_IMAGE  default: ghcr.io/REPLACE_ME/ocr-lab-frontend:0.1.0
+#   API_IMAGE       default: ghcr.io/REPLACE_ME/ocr-lab/api:0.1.0
+#   FRONTEND_IMAGE  default: ghcr.io/REPLACE_ME/ocr-lab/frontend:0.1.0
 #   SKIP_BOOTSTRAP  set to skip the remote bootstrap step
 #   SKIP_DEPS       set to skip the platform install (KServe/llm-d)
 #   SKIP_APPS       legacy path only: skip the helm app installs
@@ -31,8 +31,8 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VM_IP="${VM_IP:?set VM_IP to the GPU VM public IP}"
 SSH_USER="${SSH_USER:-user}"
 KUBECONFIG_OUT="${KUBECONFIG_OUT:-$HOME/.kube/ocr-lab.config}"
-API_IMAGE="${API_IMAGE:-ghcr.io/REPLACE_ME/ocr-lab-api:0.1.0}"
-FRONTEND_IMAGE="${FRONTEND_IMAGE:-ghcr.io/REPLACE_ME/ocr-lab-frontend:0.1.0}"
+API_IMAGE="${API_IMAGE:-ghcr.io/REPLACE_ME/ocr-lab/api:0.1.0}"
+FRONTEND_IMAGE="${FRONTEND_IMAGE:-ghcr.io/REPLACE_ME/ocr-lab/frontend:0.1.0}"
 
 API_REPO="${API_IMAGE%:*}"
 API_TAG="${API_IMAGE##*:}"

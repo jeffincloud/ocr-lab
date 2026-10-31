@@ -1,6 +1,6 @@
 # Point the API at it with: --set env.OPENAI_BASE_URL=http://mock-llm.<ns>.svc:8080
 image:
-  repository: ghcr.io/REPLACE_ME/ocr-lab-mock-llm
+  repository: ghcr.io/REPLACE_ME/ocr-lab/mock-llm
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
