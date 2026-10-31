@@ -17,6 +17,8 @@ spec:
   rules:
     - matches:
         - path: {type: PathPrefix, value: /}
+      timeouts:
+        request: {{ .Values.httpRoute.requestTimeout }}
       backendRefs:
         - name: {{ include "ocr-frontend.fullname" . }}
           port: {{ .Values.service.port }}

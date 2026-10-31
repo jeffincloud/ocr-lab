@@ -39,3 +39,6 @@ httpRoute:
     name: kserve-ingress-gateway
     namespace: kserve
   hostnames: []
+  # Without this Envoy cuts requests off at 15 s with a 504, which an extraction with
+  # thinking on reaches under load. Matches nginx's proxy timeout.
+  requestTimeout: 180s
