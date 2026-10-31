@@ -164,6 +164,23 @@ ratelimit_remaining = meter.create_gauge(
     "ocr.upstream.ratelimit.remaining", unit="1",
     description="Last rate-limit remaining value reported by the model provider, by limit type")
 
+
+def zero_counters(backend: str, fields) -> None:
+    """Export every counter series at 0 from the start.
+
+    A series that first appears at 1 has no earlier sample, so rate() sees no increase
+    and the first error of each kind after a restart never reaches the SLOs.
+    """
+    for outcome in ("ok", "bad_request", "upstream_timeout", "upstream_rate_limited",
+                    "upstream_error", "model_output_error", "internal_error"):
+        extractions.add(0, {"outcome": outcome, "backend": backend})
+    for result in ("valid", "invalid", "missing", "unparseable"):
+        mrz_checks.add(0, {"result": result})
+    for field in fields:
+        for agree in ("true", "false"):
+            field_agreement.add(0, {"field": field, "agree": agree})
+
+
 # OTel GenAI semantic conventions (client side).
 genai_duration = meter.create_histogram(
     "gen_ai.client.operation.duration", unit="s", description="GenAI operation duration")

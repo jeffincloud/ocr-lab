@@ -131,9 +131,20 @@ def test_upstream_failures_map_to_explicit_statuses(client, handler, status, out
     seen = {
         dp.attributes["outcome"]
         for rm in data.resource_metrics for sm in rm.scope_metrics for m in sm.metrics
-        if m.name == "ocr.extractions" for dp in m.data.data_points
+        if m.name == "ocr.extractions" for dp in m.data.data_points if dp.value > 0
     }
     assert outcome in seen
+
+
+def test_counters_start_at_zero():
+    # A series that first appears at 1 is invisible to rate(), so the first error of
+    # each kind after a restart would never reach the SLOs.
+    data = READER.get_metrics_data()
+    names = {m.name: {tuple(sorted(dp.attributes.items())) for dp in m.data.data_points}
+             for rm in data.resource_metrics for sm in rm.scope_metrics for m in sm.metrics}
+    assert (("backend", ocr.OCR_BACKEND), ("outcome", "internal_error")) in names["ocr.extractions"]
+    assert (("result", "unparseable"),) in names["ocr.mrz.checks"]
+    assert (("agree", "false"), ("field", "surname")) in names["ocr.mrz.field_agreement"]
 
 
 def test_bad_content_type_is_400(client):

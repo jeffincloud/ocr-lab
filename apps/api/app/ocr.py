@@ -69,6 +69,7 @@ OPENAI_EXTRA_BODY = json.loads(os.getenv("OPENAI_EXTRA_BODY") or "{}")
 OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "1024"))
 
 MODEL_NAME = OLLAMA_MODEL if OCR_BACKEND == "ollama" else OPENAI_MODEL
+AGREEMENT_FIELDS = ("surname", "given_names", "passport_number", "date_of_birth", "sex", "date_of_expiry")
 
 # One pooled client per process. A new client per request would pay a TCP
 # handshake each time and hide connection reuse from the network dashboards.
@@ -209,8 +210,7 @@ def _record_field_agreement(vlm: PassportFields, mrz: PassportFields) -> None:
     the check-digit-validated MRZ. A drop here means the model's visual reading
     got worse even when the MRZ still rescues the final answer. Not nationality:
     the page prints COLOMBIA and the MRZ says COL, so it never matches."""
-    for name in ("surname", "given_names", "passport_number",
-                 "date_of_birth", "sex", "date_of_expiry"):
+    for name in AGREEMENT_FIELDS:
         agree = _norm(getattr(vlm, name)) == _norm(getattr(mrz, name))
         tel.field_agreement.add(1, {"field": name, "agree": str(agree).lower()})
 

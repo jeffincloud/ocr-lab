@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from . import telemetry as tel
 from .schemas import ExtractResponse
-from .ocr import extract, MODEL_NAME, OCR_BACKEND, BadImageError, ModelOutputError, UpstreamError
+from .ocr import extract, AGREEMENT_FIELDS, MODEL_NAME, OCR_BACKEND, BadImageError, ModelOutputError, UpstreamError
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ async def _lifespan(app):
 
 app = FastAPI(title="OCR Lab API", lifespan=_lifespan)
 tel.setup(app)
+tel.zero_counters(OCR_BACKEND, AGREEMENT_FIELDS)
 
 # CORS is opt-in via env var. Unset in cluster (frontend proxies /api via nginx);
 # set to e.g. "http://localhost:3000" during local dev.
