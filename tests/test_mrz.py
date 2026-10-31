@@ -32,8 +32,6 @@ def test_valid_mrz_overrides_vlm_fields():
         mrz_line2=VALID_MRZ_L2,
     )
     out = _merge_mrz(vlm)
-    assert out.surname == "ERIKSSON"
-    assert out.given_names == "ANNA MARIA"
     assert out.passport_number == "L898902C3"
     assert out.nationality == "UTO"
     assert out.date_of_birth == "1974-08-12"
@@ -42,6 +40,22 @@ def test_valid_mrz_overrides_vlm_fields():
     # Fields not in MRZ must be untouched.
     assert out.date_of_issue == "2010-01-01"
     assert out.issuing_authority == "SOME AUTH"
+
+
+def test_valid_mrz_does_not_overwrite_names():
+    # TD3 check digits don't cover names: an MRZ that validates can still carry a
+    # misread name, and must not replace what the model read from the printed page.
+    vlm = PassportFields(surname="OKAFOR", given_names="CHIDI",
+                         mrz_line1=VALID_MRZ_L1, mrz_line2=VALID_MRZ_L2)
+    out = _merge_mrz(vlm)
+    assert out.surname == "OKAFOR"
+    assert out.given_names == "CHIDI"
+
+
+def test_valid_mrz_fills_in_missing_names():
+    out = _merge_mrz(PassportFields(mrz_line1=VALID_MRZ_L1, mrz_line2=VALID_MRZ_L2))
+    assert out.surname == "ERIKSSON"
+    assert out.given_names == "ANNA MARIA"
 
 
 def test_bad_check_digits_falls_back_to_vlm():

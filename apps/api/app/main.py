@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from . import telemetry as tel
 from .schemas import ExtractResponse
-from .ocr import extract, MODEL_NAME, OCR_BACKEND, ModelOutputError, UpstreamError
+from .ocr import extract, MODEL_NAME, OCR_BACKEND, BadImageError, ModelOutputError, UpstreamError
 
 log = logging.getLogger(__name__)
 
@@ -80,6 +80,9 @@ def extract_passport(request: Request, file: UploadFile = File(...)):
         extra["mrz_result"] = result.mrz_result
         return ExtractResponse(fields=result.fields, model=MODEL_NAME, mrz_result=result.mrz_result,
                                usage=result.usage)
+    except BadImageError as e:
+        outcome = "bad_request"
+        raise HTTPException(400, str(e)) from None
     except UpstreamError as e:
         outcome = e.outcome
         raise HTTPException(_STATUS[outcome], str(e)) from e

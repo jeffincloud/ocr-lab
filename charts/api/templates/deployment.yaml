@@ -29,6 +29,14 @@ spec:
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
+            {{- with .Values.modelApiKeySecret }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: api-key
+                  optional: true
+            {{- end }}
           readinessProbe:
             httpGet:
               path: {{ .Values.probes.readinessPath }}

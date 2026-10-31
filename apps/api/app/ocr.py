@@ -62,10 +62,11 @@ MAX_CONNECTIONS = int(os.getenv("UPSTREAM_MAX_CONNECTIONS", "64"))
 # KServe's LLMInferenceService gateway route may use a self-signed certificate.
 OPENAI_TLS_VERIFY = os.getenv("OPENAI_TLS_VERIFY", "true").lower() == "true"
 # Extra JSON merged into every chat request, for engine-specific knobs a hosted
-# API would reject. Qwen3.5 thinks by default; for extraction that only adds
-# latency and tokens, so the vLLM charts set
-# {"chat_template_kwargs": {"enable_thinking": false}}.
+# API would reject, e.g. {"chat_template_kwargs": {"enable_thinking": true}}.
 OPENAI_EXTRA_BODY = json.loads(os.getenv("OPENAI_EXTRA_BODY") or "{}")
+# Reasoning tokens count against this, so a thinking model needs room for both
+# its reasoning and the JSON, or the answer is cut off.
+OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "1024"))
 
 MODEL_NAME = OLLAMA_MODEL if OCR_BACKEND == "ollama" else OPENAI_MODEL
 
@@ -99,6 +100,10 @@ class ModelOutputError(Exception):
     """The model answered, but not with parseable JSON in the expected shape."""
 
 
+class BadImageError(Exception):
+    """The upload could not be decoded as an image: the client's error, not ours."""
+
+
 @dataclass
 class Completion:
     content: str
@@ -117,7 +122,11 @@ class ExtractResult:
 
 
 def _resize(image_bytes: bytes) -> tuple[bytes, str]:
-    img = Image.open(io.BytesIO(image_bytes))
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+    except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as e:
+        raise BadImageError(f"not a readable image ({e.__class__.__name__})") from None
     if max(img.size) <= MAX_IMAGE_DIM:
         return image_bytes, img.format or "PNG"
     img.thumbnail((MAX_IMAGE_DIM, MAX_IMAGE_DIM))
@@ -146,12 +155,14 @@ def _yymmdd_to_iso(s: str, kind: str) -> Optional[str]:
 
 
 def _check_mrz(fields: PassportFields) -> tuple[PassportFields, str]:
-    """Override deterministic fields with MRZ-parsed values if check digits validate.
+    """Override fields with MRZ-parsed values if check digits validate.
 
-    MRZ covers: surname, given_names, passport_number, nationality,
-    date_of_birth, sex, date_of_expiry. Falls back to VLM values on any parse
-    or check-digit failure. Never touches date_of_issue / issuing_authority
-    (those aren't encoded in the MRZ).
+    Overrides passport_number, nationality, date_of_birth, sex and date_of_expiry.
+    Names are only filled in when the VLM has none: TD3 check digits don't cover
+    them, so a valid MRZ can still carry a misread name (OAKAFOR for OKAFOR) that
+    would replace a correct reading of the printed page. Falls back to VLM values
+    on any parse or check-digit failure. Never touches date_of_issue /
+    issuing_authority (those aren't encoded in the MRZ).
 
     Returns the merged fields and the check result: valid, invalid, missing or
     unparseable. The result is the label-free quality signal behind the
@@ -171,7 +182,7 @@ def _check_mrz(fields: PassportFields) -> tuple[PassportFields, str]:
         return fields, "invalid"
     f = check.fields()
     log.info("mrz parse ok; overriding VLM fields from MRZ")
-    merged = fields.model_copy(update={
+    mrz = fields.model_copy(update={
         "surname": f.surname,
         "given_names": f.name,
         "passport_number": f.document_number,
@@ -180,8 +191,9 @@ def _check_mrz(fields: PassportFields) -> tuple[PassportFields, str]:
         "sex": f.sex,
         "date_of_expiry": _yymmdd_to_iso(f.expiry_date, "future"),
     })
-    _record_field_agreement(fields, merged)
-    return merged, "valid"
+    _record_field_agreement(fields, mrz)
+    return mrz.model_copy(update={"surname": fields.surname or mrz.surname,
+                                  "given_names": fields.given_names or mrz.given_names}), "valid"
 
 
 def _merge_mrz(fields: PassportFields) -> PassportFields:
@@ -275,7 +287,7 @@ def _extract_openai(image_bytes: bytes, image_format: str) -> Completion:
             "role": "user",
             "content": [text_part, image_part] if PROMPT_FIRST else [image_part, text_part],
         }],
-        "max_tokens": 1024,
+        "max_tokens": OPENAI_MAX_TOKENS,
         "temperature": 0,
         "response_format": {"type": "json_object"},
         **OPENAI_EXTRA_BODY,
@@ -326,7 +338,8 @@ def _infer(image_bytes: bytes, image_format: str) -> Completion:
     common = {"gen_ai.operation.name": "chat", "gen_ai.provider.name": PROVIDER_NAME,
               "gen_ai.request.model": MODEL_NAME}
     with tel.tracer.start_as_current_span(f"chat {MODEL_NAME}", kind=SpanKind.CLIENT) as span:
-        span.set_attributes({**common, "gen_ai.request.max_tokens": 1024, "gen_ai.request.temperature": 0,
+        max_tokens = 1024 if OCR_BACKEND == "ollama" else OPENAI_MAX_TOKENS
+        span.set_attributes({**common, "gen_ai.request.max_tokens": max_tokens, "gen_ai.request.temperature": 0,
                              "gen_ai.output.type": "json"})
         started = time.perf_counter()
         error_type = None

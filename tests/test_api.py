@@ -141,6 +141,12 @@ def test_bad_content_type_is_400(client):
     assert r.status_code == 400
 
 
+def test_corrupt_image_is_400_not_500(client):
+    # A bad upload is the client's error and must not burn the availability SLO.
+    r = client.post("/extract", files={"file": ("p.png", b"not an image", "image/png")})
+    assert r.status_code == 400
+
+
 def test_extra_body_reaches_the_engine(client, monkeypatch):
     # Qwen3.5 thinks unless told not to; the switch rides in OPENAI_EXTRA_BODY.
     monkeypatch.setattr(ocr, "OPENAI_EXTRA_BODY", {"chat_template_kwargs": {"enable_thinking": False}})

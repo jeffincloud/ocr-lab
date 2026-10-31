@@ -17,9 +17,13 @@ env:
   # scripts/lab-up.sh sets this for you.
   OPENAI_BASE_URL: "http://REPLACE_WITH_LLMISVC_URL"
   OPENAI_MODEL_NAME: "qwen3-5-9b"
-  # Engine-specific request fields. Qwen3.5 thinks by default; extraction doesn't need it.
+  # Engine-specific request fields. Thinking on costs tokens and latency per extraction.
   # Set to "" for a hosted API that rejects unknown fields.
-  OPENAI_EXTRA_BODY: '{"chat_template_kwargs": {"enable_thinking": false}}'
+  OPENAI_EXTRA_BODY: '{"chat_template_kwargs": {"enable_thinking": true}}'
+  # Covers the reasoning as well as the JSON (about 640 together). 1024 leaves little
+  # margin; the cap also ends a runaway reasoning loop quickly, which at 4096 tied up
+  # a request for over a minute and still produced no answer.
+  OPENAI_MAX_TOKENS: "1500"
   # KServe's gateway route uses a self-signed certificate.
   OPENAI_TLS_VERIFY: "false"
   OPENAI_TIMEOUT: "60"
@@ -39,6 +43,10 @@ env:
   # Set to a comma-separated origin list to opt into CORS. Leave blank when
   # the frontend reverse-proxies /api (the cluster default).
   ALLOWED_ORIGINS: ""
+
+# Secret holding the key for the model's route (scripts/lab-up.sh creates it), set
+# as OPENAI_API_KEY. Optional: without the Secret the API sends a placeholder.
+modelApiKeySecret: model-api-key
 
 # Image resize + base64 is CPU work: 500m throttled under load. Watch
 # container_cpu_cfs_throttled_periods_total before tightening this.
