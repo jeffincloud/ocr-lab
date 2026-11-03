@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1060" viewBox="0 0 1700 1060">
+<rect x="0.0" y="0.0" width="1700.0" height="1060.0" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1"/>
+<text x="30.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="32" fill="#111827" font-weight="bold" text-anchor="start">Thinking on vs off: same 40 passports, same model, same GPU</text>
+<text x="30.0" y="86.0" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#4B5563" font-weight="normal" text-anchor="start">Qwen3.5-9B FP8 on one L40S, 8 passports at a time through the public app. The only change is enable_thinking.</text>
+<rect x="30.0" y="112.0" width="1640.0" height="232.0" rx="14" fill="#0D1117" stroke="none" stroke-width="1"/>
+<text x="52.0" y="146.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#FFFFFF" font-weight="bold" text-anchor="start">One passport, drawn to scale</text>
+<line x1="250.0" y1="166" x2="250.0" y2="308" stroke="#232B36"/>
+<text x="250.0" y="328.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#8B949E" font-weight="normal" text-anchor="middle">0 s</text>
+<line x1="700.0" y1="166" x2="700.0" y2="308" stroke="#232B36"/>
+<text x="700.0" y="328.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#8B949E" font-weight="normal" text-anchor="middle">5 s</text>
+<line x1="1150.0" y1="166" x2="1150.0" y2="308" stroke="#232B36"/>
+<text x="1150.0" y="328.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#8B949E" font-weight="normal" text-anchor="middle">10 s</text>
+<line x1="1600.0" y1="166" x2="1600.0" y2="308" stroke="#232B36"/>
+<text x="1600.0" y="328.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#8B949E" font-weight="normal" text-anchor="middle">15 s</text>
+<text x="52.0" y="208.0" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#0086FF" font-weight="bold" text-anchor="start">Thinking on</text>
+<rect x="259.0" y="182.0" width="891.0" height="40.0" rx="4" fill="#0086FF" stroke="none" stroke-width="1"/>
+<text x="273.0" y="208.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#FFFFFF" font-weight="bold" text-anchor="start">reasoning: 476 tokens the user never sees</text>
+<rect x="1150.0" y="182.0" width="369.0" height="40.0" rx="4" fill="#50B432" stroke="none" stroke-width="1"/>
+<text x="1162.0" y="208.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#0D1117" font-weight="bold" text-anchor="start">answer: 175 tokens</text>
+<line x1="1150.0" y1="176" x2="1150.0" y2="228" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="1531.0" y="208.0" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#FFFFFF" font-weight="bold" text-anchor="start">14.1 s</text>
+<text x="52.0" y="278.0" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#93EAFF" font-weight="bold" text-anchor="start">Thinking off</text>
+<rect x="260.8" y="252.0" width="457.2" height="40.0" rx="4" fill="#50B432" stroke="none" stroke-width="1"/>
+<text x="272.8" y="278.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#0D1117" font-weight="bold" text-anchor="start">answer: 198 tokens</text>
+<line x1="260.8" y1="246" x2="260.8" y2="298" stroke="#FFFFFF" stroke-width="2" stroke-dasharray="4 3"/>
+<text x="730.0" y="278.0" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#FFFFFF" font-weight="bold" text-anchor="start">5.2 s</text>
+<text x="1150.0" y="174.0" font-family="Arial, Helvetica, sans-serif" font-size="12.5" fill="#C9D1D9" font-weight="normal" text-anchor="middle">first content at 10.0 s</text>
+<text x="266.8" y="308.0" font-family="Arial, Helvetica, sans-serif" font-size="12.5" fill="#C9D1D9" font-weight="normal" text-anchor="start">first content at 0.12 s</text>
+<text x="30.0" y="384.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#111827" font-weight="bold" text-anchor="start">What the model writes for passport 22 (fictional data). Printed issue date: 31 AUG 19.</text>
+<rect x="30.0" y="400.0" width="808.0" height="232.0" rx="14" fill="#EEF6FF" stroke="none" stroke-width="1"/>
+<text x="50.0" y="430.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#0086FF" font-weight="bold" text-anchor="start">Thinking on: reasoning, then JSON</text>
+<rect x="50.0" y="444.0" width="768.0" height="130.0" rx="10" fill="#0D1117" stroke="none" stroke-width="1"/>
+<text x="66.0" y="470.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#C9D1D9" font-weight="normal" text-anchor="start">5. Date of Birth: &quot;10 MAR 43&quot; ... So, 1943-03-10.</text>
+<text x="66.0" y="493.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#ED561B" font-weight="normal" text-anchor="start">7. Date of Issue: &quot;31 AUG 19&quot;. This implies 1919.</text>
+<text x="66.0" y="516.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#ED561B" font-weight="normal" text-anchor="start">8. Date of Expiry: &quot;30 AUG 29&quot;. This implies 1929.</text>
+<text x="66.0" y="539.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#C9D1D9" font-weight="normal" text-anchor="start">Now I will format this into the requested JSON.</text>
+<text x="66.0" y="562.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#93EAFF" font-weight="normal" text-anchor="start">{&quot;date_of_issue&quot;: &quot;1919-08-31&quot;, ...}</text>
+<text x="50.0" y="598.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">Visible reasoning shows why it went wrong. In the batch the same</text>
+<text x="50.0" y="618.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">passport came back right (2019): reasoning varies between runs.</text>
+<rect x="862.0" y="400.0" width="808.0" height="232.0" rx="14" fill="#EDFAFE" stroke="none" stroke-width="1"/>
+<text x="882.0" y="430.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#058DC7" font-weight="bold" text-anchor="start">Thinking off: JSON straight away</text>
+<rect x="882.0" y="444.0" width="768.0" height="130.0" rx="10" fill="#0D1117" stroke="none" stroke-width="1"/>
+<text x="898.0" y="470.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#C9D1D9" font-weight="normal" text-anchor="start">{</text>
+<text x="898.0" y="493.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#C9D1D9" font-weight="normal" text-anchor="start">  &quot;date_of_birth&quot;: &quot;1943-03-10&quot;,</text>
+<text x="898.0" y="516.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#ED561B" font-weight="normal" text-anchor="start">  &quot;date_of_issue&quot;: &quot;1919-08-31&quot;,</text>
+<text x="898.0" y="539.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#ED561B" font-weight="normal" text-anchor="start">  &quot;date_of_expiry&quot;: &quot;1929-08-30&quot;,</text>
+<text x="898.0" y="562.0" font-family="Consolas, Menlo, monospace" font-size="14" fill="#C9D1D9" font-weight="normal" text-anchor="start">  ...}</text>
+<text x="882.0" y="598.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">Same mistake, no explanation. The MRZ check-digit step corrected</text>
+<text x="882.0" y="618.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">the expiry to 2029; the issue date isn&#x27;t in the MRZ, so it stayed wrong.</text>
+<text x="30.0" y="672.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#111827" font-weight="bold" text-anchor="start">The whole batch: 40 passports each</text>
+<rect x="30.0" y="688.0" width="222.3" height="158.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
+<text x="46.0" y="716.0" font-family="Arial, Helvetica, sans-serif" font-size="14.5" fill="#4B5563" font-weight="bold" text-anchor="start">Latency, p50</text>
+<text x="46.0" y="738.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0086FF" font-weight="bold" text-anchor="start">thinking on</text>
+<text x="46.0" y="768.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#111827" font-weight="bold" text-anchor="start">14.1 s</text>
+<text x="46.0" y="798.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="start">thinking off</text>
+<text x="46.0" y="828.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#50B432" font-weight="bold" text-anchor="start">5.2 s</text>
+<rect x="266.3" y="688.0" width="222.3" height="158.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
+<text x="282.3" y="716.0" font-family="Arial, Helvetica, sans-serif" font-size="14.5" fill="#4B5563" font-weight="bold" text-anchor="start">First content</text>
+<text x="282.3" y="738.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0086FF" font-weight="bold" text-anchor="start">thinking on</text>
+<text x="282.3" y="768.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#111827" font-weight="bold" text-anchor="start">10.0 s</text>
+<text x="282.3" y="798.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="start">thinking off</text>
+<text x="282.3" y="828.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#50B432" font-weight="bold" text-anchor="start">0.12 s</text>
+<rect x="502.6" y="688.0" width="222.3" height="158.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
+<text x="518.6" y="716.0" font-family="Arial, Helvetica, sans-serif" font-size="14.5" fill="#4B5563" font-weight="bold" text-anchor="start">Output tokens</text>
+<text x="518.6" y="738.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0086FF" font-weight="bold" text-anchor="start">thinking on</text>
+<text x="518.6" y="768.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#111827" font-weight="bold" text-anchor="start">645</text>
+<text x="518.6" y="798.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="start">thinking off</text>
+<text x="518.6" y="828.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#50B432" font-weight="bold" text-anchor="start">203</text>
+<rect x="738.9" y="688.0" width="222.3" height="158.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
+<text x="754.9" y="716.0" font-family="Arial, Helvetica, sans-serif" font-size="14.5" fill="#4B5563" font-weight="bold" text-anchor="start">Answered</text>
+<text x="754.9" y="738.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0086FF" font-weight="bold" text-anchor="start">thinking on</text>
+<text x="754.9" y="768.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#111827" font-weight="bold" text-anchor="start">37/40</text>
+<text x="754.9" y="798.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="start">thinking off</text>
+<text x="754.9" y="828.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#50B432" font-weight="bold" text-anchor="start">40/40</text>
+<rect x="975.1" y="688.0" width="222.3" height="158.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
+<text x="991.1" y="716.0" font-family="Arial, Helvetica, sans-serif" font-size="14.5" fill="#4B5563" font-weight="bold" text-anchor="start">Wrong fields</text>
+<text x="991.1" y="738.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0086FF" font-weight="bold" text-anchor="start">thinking on</text>
+<text x="991.1" y="768.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#50B432" font-weight="bold" text-anchor="start">0 of 259</text>
+<text x="991.1" y="798.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="start">thinking off</text>
+<text x="991.1" y="828.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#111827" font-weight="bold" text-anchor="start">2 of 280</text>
+<rect x="1211.4" y="688.0" width="222.3" height="158.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
+<text x="1227.4" y="716.0" font-family="Arial, Helvetica, sans-serif" font-size="14.5" fill="#4B5563" font-weight="bold" text-anchor="start">Fully correct</text>
+<text x="1227.4" y="738.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0086FF" font-weight="bold" text-anchor="start">thinking on</text>
+<text x="1227.4" y="768.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#111827" font-weight="bold" text-anchor="start">37/40</text>
+<text x="1227.4" y="798.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="start">thinking off</text>
+<text x="1227.4" y="828.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#50B432" font-weight="bold" text-anchor="start">38/40</text>
+<rect x="1447.7" y="688.0" width="222.3" height="158.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1"/>
+<text x="1463.7" y="716.0" font-family="Arial, Helvetica, sans-serif" font-size="14.5" fill="#4B5563" font-weight="bold" text-anchor="start">Per 1,000</text>
+<text x="1463.7" y="738.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#0086FF" font-weight="bold" text-anchor="start">thinking on</text>
+<text x="1463.7" y="768.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#111827" font-weight="bold" text-anchor="start">$0.57</text>
+<text x="1463.7" y="798.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="start">thinking off</text>
+<text x="1463.7" y="828.0" font-family="Arial, Helvetica, sans-serif" font-size="25" fill="#50B432" font-weight="bold" text-anchor="start">$0.18</text>
+<text x="30.0" y="874.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">Green marks the better result. Wrong fields leave out nationality: both modes sometimes write the country name instead of the code, which is a format choice and not a misread.</text>
+<rect x="30.0" y="900.0" width="1640.0" height="110.0" rx="16" fill="#F6F8FA" stroke="none" stroke-width="1"/>
+<text x="56.0" y="940.0" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#111827" font-weight="bold" text-anchor="start">What thinking bought: zero misread fields on every passport it answered.</text>
+<text x="56.0" y="968.0" font-family="Arial, Helvetica, sans-serif" font-size="15.5" fill="#4B5563" font-weight="normal" text-anchor="start">What it cost: 2.7× the latency, 3.2× the tokens, 10 s before the first character, and 3 of 40 passports with no answer at all</text>
+<text x="56.0" y="990.0" font-family="Arial, Helvetica, sans-serif" font-size="15.5" fill="#4B5563" font-weight="normal" text-anchor="start">(reasoning ran into the 1,500-token cap). On this batch, thinking off delivered 3× more fully correct passports per minute.</text>
+<text x="30.0" y="1038.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">An earlier batch of 40 from the same generator (rotation, blur, noise) went harder against thinking off: 13 wrong fields of 320, against 0 with it on. Measured 3 Nov 2026.</text>
+</svg>

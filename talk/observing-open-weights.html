@@ -1,0 +1,493 @@
+<title>Observing Open Weights</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout concept: a field guide. One long reading column, wide figures, and the three
+   telemetry signals keep the same colour everywhere: amber metrics, teal traces, magenta logs. */
+:root{
+  --bg:#f3f5f8;--surface:#ffffff;--fg:#151d27;--muted:#566476;--line:#d3dae3;--soft:#e8ecf2;
+  --accent:#2c49c7;--m:#a85800;--t:#067a80;--l:#a3247c;--bad:#bb2f26;--ok:#1b7442;--warn:#8a6100;
+  --display:"Bricolage Grotesque","Avenir Next","Segoe UI",sans-serif;
+  --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f141a;--surface:#161d25;--fg:#e8edf3;--muted:#9aa8b7;--line:#2c3744;--soft:#1f2832;
+  --accent:#93a8ff;--m:#f0a54e;--t:#4fcbd1;--l:#ee78c8;--bad:#ff8a7e;--ok:#63d296;--warn:#e7c060;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141a;--surface:#161d25;--fg:#e8edf3;--muted:#9aa8b7;--line:#2c3744;--soft:#1f2832;
+  --accent:#93a8ff;--m:#f0a54e;--t:#4fcbd1;--l:#ee78c8;--bad:#ff8a7e;--ok:#63d296;--warn:#e7c060;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:400 16px/1.55 var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 72px}
+.wrap{max-width:1120px;margin:0 auto;display:grid;gap:56px}
+header{padding-block:48px 0;display:grid;gap:16px}
+.eyebrow{font:500 13px/1.3 var(--mono);color:var(--muted);letter-spacing:.02em}
+h1{font:700 clamp(38px,6.4vw,68px)/1.02 var(--display);letter-spacing:-.02em;margin:0;text-wrap:balance}
+.lede{font-size:20px;line-height:1.45;max-width:46em;margin:0}
+.src{font-size:14px;color:var(--muted);max-width:68ch;margin:0}
+section{display:grid;gap:16px;min-width:0;scroll-margin-top:16px}
+h2{font:700 clamp(25px,3.2vw,33px)/1.15 var(--display);letter-spacing:-.01em;margin:0;text-wrap:balance}
+h2 .n{font:500 14px var(--mono);color:var(--muted);display:block;letter-spacing:.02em;margin-bottom:6px}
+h3{font:600 17px/1.3 var(--body);margin:12px 0 0}
+p{margin:0;max-width:72ch}
+.note{font-size:14px;color:var(--muted);max-width:76ch}
+a{color:var(--accent)}
+a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+nav ol{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 18px;font-size:14px;counter-reset:s}
+nav li{counter-increment:s}
+nav li::before{content:counter(s) " ";font:500 12px var(--mono);color:var(--muted)}
+.points{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
+.points li{background:var(--surface);padding:16px 18px;min-width:0}
+.points strong{display:block;font:600 16px/1.3 var(--body);margin-bottom:6px}
+.points span{font-size:15px;color:var(--muted)}
+figure{margin:0;display:grid;gap:10px;min-width:0}
+figcaption{font-size:14px;color:var(--muted);max-width:80ch}
+.fig{overflow-x:auto;background:var(--surface);border:1px solid var(--line);padding:12px}
+.fig svg{display:block;width:100%;height:auto}
+.fig svg.arch{min-width:980px}
+.fig svg.wf{min-width:800px}
+svg text{font-family:var(--body);fill:var(--fg)}
+svg .sm{font-size:12.5px}
+svg .xs{font-size:11.5px;fill:var(--muted)}
+svg .mono{font-family:var(--mono);font-size:11.5px}
+svg .h{font-size:14.5px;font-weight:600}
+svg .hd{font-family:var(--display);font-size:17px;font-weight:700}
+svg .cap{font-family:var(--mono);font-size:11.5px;fill:var(--muted)}
+svg .box{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
+svg .panel{fill:var(--soft);stroke:var(--line);stroke-width:1.5}
+svg .arrow{stroke:var(--muted);stroke-width:1.5;fill:none}
+svg .sm-m,svg .tm{fill:var(--m)} svg .sm-t,svg .tt{fill:var(--t)} svg .sm-l,svg .tl{fill:var(--l)} svg .tb{fill:var(--bad)}
+svg .lm{stroke:var(--m);stroke-width:2;fill:none} svg .lt{stroke:var(--t);stroke-width:2;fill:none} svg .ll{stroke:var(--l);stroke-width:2;fill:none}
+svg .gmid{stroke:var(--line);stroke-width:1}
+svg .barT{fill:var(--t)} svg .barL{fill:none;stroke:var(--l);stroke-width:2} svg .barMute{fill:var(--muted);opacity:.55} svg .barQ{fill:var(--m)}
+svg .barThink{fill:var(--accent)} svg .barOut{fill:var(--ok)}
+svg .mark{stroke:var(--fg);stroke-width:1.25;stroke-dasharray:4 3}
+svg .inv{fill:var(--surface);font-size:12.5px;font-weight:600}
+.tw{overflow-x:auto;border:1px solid var(--line);background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;line-height:1.45}
+.tw table{min-width:760px}
+th{font:600 13px/1.3 var(--body);text-align:left;color:var(--muted);background:var(--soft);padding:9px 12px;border-bottom:1px solid var(--line)}
+td{padding:10px 12px;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:500}
+code{font:400 .9em/1.4 var(--mono);overflow-wrap:anywhere}
+.sig{display:inline-block;font:500 11.5px/1 var(--mono);padding:3px 5px;border:1px solid currentColor;margin-right:3px;white-space:nowrap}
+.M{color:var(--m)}.T{color:var(--t)}.L{color:var(--l)}
+.pill{font:500 12px/1 var(--mono);white-space:nowrap}
+.pill.ok{color:var(--ok)}.pill.part{color:var(--warn)}.pill.no{color:var(--bad)}
+.num{font-variant-numeric:tabular-nums}
+.flag{border:1px solid var(--bad);padding:14px 16px;background:var(--surface);max-width:80ch}
+.flag strong{color:var(--bad)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:24px}
+.cols>div{min-width:0}
+.cols ul,section>ul,section>ol{margin:8px 0 0;padding-left:20px;display:grid;gap:6px;max-width:76ch}
+pre{margin:0;overflow-x:auto;background:var(--surface);border:1px solid var(--line);padding:12px 14px;font:400 13.5px/1.5 var(--mono)}
+@media (max-width:640px){.lede{font-size:18px}header{padding-block:28px 0}.wrap{gap:44px}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Passport OCR lab · Qwen3.5-9B FP8 · vLLM · KServe · llm-d · one NVIDIA L40S</div>
+  <h1>Observing open weights</h1>
+  <p class="lede">With open weights the model server is yours, so you can see inside it. The hard part stops being how to get signals and becomes knowing which ones to trust.</p>
+  <p class="src">Every number comes from runs on the real GPU, and none from the mock. The first trace is one request, the first after a restart on 31 Oct 2026, captured before the fixes on 3 Nov 2026; read it as an example and not as a typical value. Accuracy figures come from 40 deliberately degraded synthetic passports and are directional. Metric, span and log names were read from the running stack.</p>
+  <nav aria-label="Talk order"><ol>
+    <li><a href="#setup">The setup</a></li><li><a href="#layers">Layers</a></li><li><a href="#instrument">How each piece is instrumented</a></li><li><a href="#request">One request</a></li><li><a href="#signals">Metrics, logs, traces</a></li><li><a href="#correlation">Correlation</a></li><li><a href="#workload">Workload behaviour</a></li><li><a href="#misleading">Misleading signals</a></li><li><a href="#uncommon">Uncommon things</a></li><li><a href="#notshown">What we aren't showing</a></li><li><a href="#demo">Live demo</a></li>
+  </ol></nav>
+</header>
+
+<section aria-labelledby="mention">
+  <h2 id="mention">What I would mention</h2>
+  <ul class="points">
+    <li><strong>You can finally answer "why is it slow?"</strong><span>A hosted API gives you a latency number. Here the same request splits into queue, prefill and decode, next to memory, power and scheduling.</span></li>
+    <li><strong>One request is mostly silence</strong><span>89% of a 12.8 s extraction is decode. For about 8 s of it the engine is generating reasoning and the client has received nothing.</span></li>
+    <li><strong>Classic saturation signals lie</strong><span>GPU utilization read 100% with 1 request and with 64, while throughput kept climbing. KV cache and waiting requests tell the truth.</span></li>
+    <li><strong>Quality needs its own signal</strong><span>Availability and latency stay green when the answer is wrong. Passport check digits give a free, label-free check, and even that one misleads.</span></li>
+    <li><strong>Correlation is only as good as its weakest hop</strong><span>At first only the API linked metric to trace to log. After edge tracing and one shared request ID, a single ID now runs from Envoy to vLLM's own request name.</span></li>
+    <li><strong>Observability needs tests too</strong><span>Several bugs made the system look healthier than it was, including a real 502 that left availability at 100%, and a gateway that quietly ran the scheduler 16 times per request.</span></li>
+  </ul>
+</section>
+
+<section id="setup" aria-labelledby="h-setup">
+  <h2 id="h-setup"><span class="n">1 · The setup</span>One pipeline for every signal</h2>
+  <p>The OpenTelemetry Collector is the only agent. Prometheus scrapes nothing and only stores data, so the PII rules, cardinality guard and sampling apply to everything, wherever it came from.</p>
+  <figure>
+    <div class="fig">
+      <svg class="arch" viewBox="0 0 1200 840" role="img" aria-label="Request path from browser to GPU across the top. Each component sends metrics, traces or logs into one OpenTelemetry Collector, which writes to Prometheus, Tempo and Loki, all read by Grafana. nginx produces no spans.">
+        <defs>
+          <marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L8 4L0 8z" fill="context-stroke"/></marker>
+        </defs>
+        <text class="cap" x="32" y="22">REQUEST PATH</text>
+        <!-- arrow labels -->
+        <text class="xs" x="180" y="40" text-anchor="middle">upload</text>
+        <text class="xs" x="348" y="40" text-anchor="middle">/api/extract</text>
+        <text class="xs" x="516" y="40" text-anchor="middle">X-Request-ID</text>
+        <text class="xs" x="684" y="40" text-anchor="middle">traceparent</text>
+        <text class="xs" x="852" y="40" text-anchor="middle">traceparent</text>
+        <text class="xs" x="1020" y="40" text-anchor="middle">CUDA</text>
+        <!-- request boxes -->
+        <g>
+          <rect class="box" x="32" y="48" width="128" height="62"/><text class="h" x="96" y="74" text-anchor="middle">Browser / k6</text><text class="xs" x="96" y="94" text-anchor="middle">public internet</text>
+          <rect class="box" x="200" y="48" width="128" height="62"/><text class="h" x="264" y="74" text-anchor="middle">Envoy Gateway</text><text class="xs" x="264" y="94" text-anchor="middle">edge, port 80</text>
+          <rect class="box" x="368" y="48" width="128" height="62"/><text class="h" x="432" y="74" text-anchor="middle">nginx</text><text class="xs" x="432" y="94" text-anchor="middle">frontend, proxy</text>
+          <rect class="box" x="536" y="48" width="128" height="62"/><text class="h" x="600" y="74" text-anchor="middle">FastAPI API</text><text class="xs" x="600" y="94" text-anchor="middle">parse, MRZ check</text>
+          <rect class="box" x="704" y="48" width="128" height="62"/><text class="h" x="768" y="74" text-anchor="middle">llm-d EPP</text><text class="xs" x="768" y="94" text-anchor="middle">picks the replica</text>
+          <rect class="box" x="872" y="48" width="128" height="62"/><text class="h" x="936" y="74" text-anchor="middle">vLLM</text><text class="xs" x="936" y="94" text-anchor="middle">Qwen3.5-9B</text>
+          <rect class="box" x="1040" y="48" width="128" height="62"/><text class="h" x="1104" y="74" text-anchor="middle">L40S GPU</text><text class="xs" x="1104" y="94" text-anchor="middle">DCGM exporter</text>
+        </g>
+        <path class="arrow" d="M160 79H199" marker-end="url(#a)"/><path class="arrow" d="M328 79H367" marker-end="url(#a)"/><path class="arrow" d="M496 79H535" marker-end="url(#a)"/><path class="lt" d="M664 79H703" marker-end="url(#a)"/><path class="lt" d="M832 79H871" marker-end="url(#a)"/><path class="arrow" d="M1000 79H1039" marker-end="url(#a)"/>
+        <!-- how each one emits -->
+        <text class="cap" x="32" y="136">HOW IT EMITS</text>
+        <text class="xs" x="32" y="158">k6 summary only,</text><text class="xs" x="32" y="174">not in the pipeline</text>
+        <text class="sm tt" x="200" y="158">EnvoyProxy, OTLP</text><text class="sm tm" x="200" y="176">scrape /stats</text><text class="sm tl" x="200" y="194">log with trace_id</text>
+        <text class="sm tl" x="368" y="158">JSON log, filelog</text><text class="sm tb" x="368" y="176">no spans, no metrics</text>
+        <text class="sm tt" x="536" y="158">OTel SDK, OTLP</text><text class="sm tm" x="536" y="176">SDK with exemplars</text><text class="sm tl" x="536" y="194">JSON with trace_id</text>
+        <text class="sm tt" x="704" y="158">KServe tracing, OTLP</text><text class="sm tm" x="704" y="176">scrape :9090 + token</text><text class="sm tl" x="704" y="194">stdout, filelog</text>
+        <text class="sm tt" x="872" y="158">--otlp-traces-endpoint</text><text class="sm tm" x="872" y="176">scrape :8000</text><text class="sm tl" x="872" y="194">stdout, filelog</text>
+        <text class="sm tm" x="1040" y="158">scrape :9400</text><text class="sm tb" x="1040" y="176">no PROF fields here</text>
+        <!-- emission lines -->
+        <path class="lt" d="M224 204V298" marker-end="url(#a)"/><path class="lm" d="M264 204V298" marker-end="url(#a)"/><path class="ll" d="M304 204V298" marker-end="url(#a)"/>
+        <path class="ll" d="M432 204V298" marker-end="url(#a)"/>
+        <path class="lt" d="M560 204V298" marker-end="url(#a)"/><path class="lm" d="M600 204V298" marker-end="url(#a)"/><path class="ll" d="M640 204V298" marker-end="url(#a)"/>
+        <path class="lt" d="M728 204V298" marker-end="url(#a)"/><path class="lm" d="M768 204V298" marker-end="url(#a)"/><path class="ll" d="M808 204V298" marker-end="url(#a)"/>
+        <path class="lt" d="M896 204V298" marker-end="url(#a)"/><path class="lm" d="M936 204V298" marker-end="url(#a)"/><path class="ll" d="M976 204V298" marker-end="url(#a)"/>
+        <path class="lm" d="M1104 204V298" marker-end="url(#a)"/>
+        <!-- platform sources -->
+        <text class="cap" x="32" y="250">PLATFORM</text>
+        <rect class="box" x="32" y="262" width="140" height="56"/><text class="sm" x="102" y="284" text-anchor="middle" font-weight="600">kubelet</text><text class="xs" x="102" y="304" text-anchor="middle">kubeletstats :10250</text>
+        <rect class="box" x="32" y="330" width="140" height="56"/><text class="sm" x="102" y="352" text-anchor="middle" font-weight="600">kube-state-metrics</text><text class="xs" x="102" y="372" text-anchor="middle">scrape :8080</text>
+        <rect class="box" x="32" y="398" width="140" height="56"/><text class="sm" x="102" y="420" text-anchor="middle" font-weight="600">Kubernetes events</text><text class="xs" x="102" y="440" text-anchor="middle">k8sobjects watch</text>
+        <path class="lm" d="M172 310H199" marker-end="url(#a)"/><path class="lm" d="M172 358H199" marker-end="url(#a)"/><path class="ll" d="M172 426H199" marker-end="url(#a)"/>
+        <!-- collector -->
+        <rect class="panel" x="200" y="300" width="968" height="180"/>
+        <text class="hd" x="222" y="332">OpenTelemetry Collector</text><text class="xs" x="442" y="331">DaemonSet, the only agent. Receivers, then processors, then exporter.</text>
+        <text class="sm tt" x="222" y="366" font-weight="600">Traces</text><text class="sm" x="290" y="366">otlp</text><text class="sm" x="430" y="366">k8sattributes, fail-closed redaction, scrub, mask IPs, tail sampling (70 s wait)</text><text class="sm" x="1068" y="366">to Tempo</text>
+        <text class="sm tm" x="222" y="402" font-weight="600">Metrics</text><text class="sm" x="290" y="402">otlp, prometheus,</text><text class="sm" x="290" y="419">kubeletstats</text><text class="sm" x="430" y="402">k8sattributes, cardinality guard (drops request IDs, client IPs, full URLs)</text><text class="sm" x="1068" y="402">to Prometheus</text>
+        <text class="sm tl" x="222" y="452" font-weight="600">Logs</text><text class="sm" x="290" y="446">otlp, filelog,</text><text class="sm" x="290" y="463">k8sobjects, alerts</text><text class="sm" x="430" y="452">k8sattributes, name after the spans, scrub MRZ and images, mask IPs</text><text class="sm" x="1068" y="452">to Loki</text>
+        <!-- to stores -->
+        <path class="lm" d="M320 480V546" marker-end="url(#a)"/><text class="xs" x="330" y="518">OTLP</text>
+        <path class="lt" d="M680 480V546" marker-end="url(#a)"/><text class="xs" x="690" y="518">OTLP</text>
+        <path class="ll" d="M1040 480V546" marker-end="url(#a)"/><text class="xs" x="1050" y="518">OTLP</text>
+        <!-- stores -->
+        <rect class="box" x="200" y="548" width="240" height="96"/><text class="hd tm" x="320" y="576" text-anchor="middle">Prometheus</text><text class="xs" x="320" y="598" text-anchor="middle">583 metric names, 5,414 series idle</text><text class="xs" x="320" y="616" text-anchor="middle">SLO and cost rules, exemplars</text><text class="xs" x="320" y="632" text-anchor="middle">survives stop/start</text>
+        <rect class="box" x="560" y="548" width="240" height="96"/><text class="hd tt" x="680" y="576" text-anchor="middle">Tempo</text><text class="xs" x="680" y="598" text-anchor="middle">4 services, 23 spans per request</text><text class="xs" x="680" y="616" text-anchor="middle">generates span metrics</text><text class="xs" x="680" y="632" text-anchor="middle">and the service graph</text>
+        <rect class="box" x="920" y="548" width="240" height="96"/><text class="hd tl" x="1040" y="576" text-anchor="middle">Loki</text><text class="xs" x="1040" y="598" text-anchor="middle">API and Envoy logs carry trace_id</text><text class="xs" x="1040" y="616" text-anchor="middle">engine logs named after their spans</text><text class="xs" x="1040" y="632" text-anchor="middle">Kubernetes events and alerts</text>
+        <!-- correlation between stores -->
+        <path class="arrow" d="M440 576H559" marker-end="url(#a)"/><text class="xs" x="500" y="568" text-anchor="middle">exemplar trace_id</text>
+        <path class="arrow" d="M560 616H441" marker-end="url(#a)"/><text class="xs" x="500" y="608" text-anchor="middle">span metrics</text><text class="xs" x="500" y="634" text-anchor="middle">trace to engine state</text>
+        <path class="arrow" d="M800 576H919" marker-end="url(#a)"/><text class="xs" x="860" y="568" text-anchor="middle">trace_id query</text>
+        <path class="arrow" d="M920 616H801" marker-end="url(#a)"/><text class="xs" x="860" y="608" text-anchor="middle">derived field</text>
+        <!-- grafana -->
+        <path class="arrow" d="M320 644V698" marker-end="url(#a)"/><path class="arrow" d="M680 644V698" marker-end="url(#a)"/><path class="arrow" d="M1040 644V698" marker-end="url(#a)"/>
+        <rect class="panel" x="200" y="700" width="960" height="64"/>
+        <text class="hd" x="222" y="730">Grafana</text><text class="sm" x="310" y="729">7 dashboards: Request journey, Inference, GPU, Routing, SLOs and quality, Cold start, Cost</text><text class="xs" x="222" y="750">Admin only, through the WireGuard tunnel. Never exposed on the public IP.</text>
+        <!-- as code -->
+        <rect class="box" x="32" y="548" width="140" height="216"/><text class="sm" x="102" y="572" text-anchor="middle" font-weight="600">Kept as code</text>
+        <text class="xs" x="46" y="598">slos.yaml generates</text><text class="xs" x="46" y="614">SLIs, budgets and</text><text class="xs" x="46" y="630">burn-rate alerts</text><text class="xs" x="46" y="660">build.py generates</text><text class="xs" x="46" y="676">dashboards</text><text class="xs" x="46" y="706">Installed by the</text><text class="xs" x="46" y="722">bootstrap on every</text><text class="xs" x="46" y="738">rebuild</text>
+        <path class="arrow" d="M172 596H199" marker-end="url(#a)"/><path class="arrow" d="M172 732H199" marker-end="url(#a)"/>
+        <!-- legend -->
+        <path class="lm" d="M200 800H236"/><text class="sm" x="244" y="804">metrics</text>
+        <path class="lt" d="M320 800H356"/><text class="sm" x="364" y="804">traces</text>
+        <path class="ll" d="M432 800H468"/><text class="sm" x="476" y="804">logs</text>
+        <path class="arrow" d="M540 800H576"/><text class="sm" x="584" y="804">request or link between tools</text>
+        <text class="sm tb" x="810" y="804">red text: a signal that is missing here</text>
+      </svg>
+    </div>
+    <figcaption>Three signals, one collector. Red marks what this setup doesn't produce; Envoy lost its red mark on 3 Nov, when it started emitting spans. The earlier architecture diagram shows the request and serving side; this one shows only how telemetry leaves each component.</figcaption>
+  </figure>
+</section>
+
+<section id="layers" aria-labelledby="h-layers">
+  <h2 id="h-layers"><span class="n">2 · Layers</span>Each layer answers a different question</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Layer</th><th>The question</th><th>Signals here</th><th>Dashboard</th></tr></thead>
+    <tbody>
+      <tr><td>User and edge</td><td>What did the visitor actually get?</td><td><code>envoy_http_downstream_rq_*</code>, Envoy and nginx access logs</td><td>Routing</td></tr>
+      <tr><td>Application</td><td>Did the extraction work, and where did the time go?</td><td><code>ocr_extractions_total</code>, <code>ocr_stage_duration_seconds</code>, API spans and logs</td><td>Journey, SLOs</td></tr>
+      <tr><td>Model quality</td><td>Was the answer right, with no human label?</td><td><code>ocr_mrz_checks_total</code>, <code>ocr_mrz_field_agreement_total</code></td><td>SLOs</td></tr>
+      <tr><td>Routing</td><td>Why did this request go to this replica?</td><td><code>llm_d_epp_*</code>, filter, scorer and pick spans</td><td>Routing</td></tr>
+      <tr><td>Inference engine</td><td>Is it waiting, loading the prompt or generating?</td><td><code>vllm:*</code>, <code>gen_ai.latency.*</code> on spans, start-up logs</td><td>Inference</td></tr>
+      <tr><td>GPU</td><td>Is the hardware healthy, and how efficient is it?</td><td><code>DCGM_FI_DEV_*</code>, <code>vllm:tokens_per_joule</code></td><td>GPU</td></tr>
+      <tr><td>Platform</td><td>Did Kubernetes get the model running, and how long did it take?</td><td><code>kube_pod_*</code>, <code>k8s_container_*</code>, Kubernetes events</td><td>Cold start</td></tr>
+      <tr><td>Economics</td><td>What does one extraction cost?</td><td><code>ocr:cost_per_1k_extractions_usd</code>, <code>ocr:gpu_tokens_per_usd</code></td><td>Cost</td></tr>
+      <tr><td>Telemetry itself</td><td>Can I trust what I'm looking at?</td><td><code>otelcol_*</code>, <code>redaction.*.count</code> on spans, pipeline alerts</td><td>Alerts only</td></tr>
+    </tbody>
+  </table></div>
+  <h3>What open weights add</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Question</th><th>Hosted API</th><th>This setup</th></tr></thead>
+    <tbody>
+      <tr><td>Why is it slow?</td><td>Total latency, and first token if you stream</td><td>Queue, prefill and decode on every request</td></tr>
+      <tr><td>Am I near capacity?</td><td>A 429 and rate-limit headers</td><td>KV cache, waiting requests, preemptions. vLLM even logs its limit: 39.5x concurrency at 16,384 tokens</td></tr>
+      <tr><td>What does it cost?</td><td>Tokens times list price, flat per request</td><td>GPU hour divided by throughput, so cost falls as load rises</td></tr>
+      <tr><td>Why was the first request so late?</td><td>Not your problem</td><td>431 s on restart, 683 s on a fresh node, visible phase by phase, and all yours to fix</td></tr>
+      <tr><td>Did the hardware misbehave?</td><td>The provider's status page</td><td>Power, temperature, clock limits, XID errors</td></tr>
+      <tr><td>Where does the data go?</td><td>To the provider</td><td>Nowhere, which also makes keeping it out of your own telemetry your job</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="instrument" aria-labelledby="h-inst">
+  <h2 id="h-inst"><span class="n">3 · How each piece is instrumented</span>Very little of this needed code</h2>
+  <p>Only the API has custom instrumentation. vLLM, llm-d, Envoy and the GPU needed configuration, because the open-source stack already exposes the signals.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Piece</th><th>How</th><th>Effort</th><th>What we get</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>k6</td><td>Load script with realistic user shapes</td><td>Script</td><td>An independent p50 and p95. That's how the wrong histogram was caught</td><td><code>loadtest/k6/ocr-users.js</code></td></tr>
+      <tr><td>Envoy Gateway</td><td><span class="sig T">T</span>an <code>EnvoyProxy</code> that sends spans over OTLP. <span class="sig M">M</span>collector scrapes <code>/stats/prometheus</code>. <span class="sig L">L</span>JSON access log with <code>trace_id</code></td><td>Config</td><td>The trace now starts at the edge. Rates, status classes, timeouts, <code>response_flags</code>, the request ID, and the client network (last octet masked)</td><td><code>templates/gateway-telemetry.yaml</code></td></tr>
+      <tr><td>nginx</td><td><span class="sig L">L</span>custom JSON <code>log_format</code></td><td>Config</td><td><code>request_time</code>, <code>upstream_response_time</code>, Envoy's <code>request_id</code> passed on to the API, and the <code>traceparent</code> it forwards</td><td><code>apps/frontend/nginx.conf</code></td></tr>
+      <tr><td>FastAPI API</td><td><span class="sig T">T</span><span class="sig M">M</span><span class="sig L">L</span>OTel SDK, FastAPI and HTTPX auto-instrumentation, manual <code>ocr.*</code> spans, GenAI conventions, counters started at 0</td><td>Code</td><td>Stages, tokens, client-side first token, finish reason, MRZ result, field agreement, exemplars</td><td><code>apps/api/app/telemetry.py</code>, <code>ocr.py</code></td></tr>
+      <tr><td>llm-d EPP</td><td><span class="sig T">T</span><code>tracing</code> block on the LLMInferenceService. <span class="sig M">M</span>scrape with a bearer token</td><td>Config</td><td>A span per filter, scorer and pick, with scores. Plugin latency, pool state, TTFT as the router sees it</td><td><code>charts/model-llmd</code></td></tr>
+      <tr><td>vLLM</td><td><span class="sig T">T</span><code>--otlp-traces-endpoint</code>. <span class="sig M">M</span>built-in <code>/metrics</code>. <span class="sig L">L</span>stdout</td><td>Config</td><td>Queue, prefill and decode per request, KV cache, preemptions, tokens, finish reason, start-up milestones</td><td><code>charts/model-llmd</code></td></tr>
+      <tr><td>GPU</td><td><span class="sig M">M</span>DCGM exporter with an explicit counter list</td><td>Config</td><td>Power, temperature, clocks, memory, XID errors. Profiling counters crash the exporter on this VM</td><td><code>charts/observability/files/dcgm/counters.csv</code></td></tr>
+      <tr><td>kube-state-metrics</td><td><span class="sig M">M</span>scrape, keeping pod and deployment series</td><td>Config</td><td>Pod creation and ready times, which give the cold-start number</td><td><code>files/rules/lab.rules.yaml</code></td></tr>
+      <tr><td>Kubelet</td><td><span class="sig M">M</span><code>kubeletstats</code> receiver, pod and container groups</td><td>Config</td><td>CPU and memory against limits. It showed the API at 13% of its CPU limit under load</td><td><code>files/collector/k8s.yaml</code></td></tr>
+      <tr><td>Pods and events</td><td><span class="sig L">L</span><code>filelog</code> and <code>k8sobjects</code></td><td>Config</td><td>Logs from three namespaces. Scheduled, Pulled, Unhealthy and Ready events as log lines</td><td><code>files/collector/k8s.yaml</code></td></tr>
+      <tr><td>Collector</td><td>Fail-closed redaction, value scrubbing, cardinality guard, tail sampling. Reports on itself over a separate path</td><td>Config</td><td>One place to enforce policy, plus proof that it's working</td><td><code>files/collector/base.yaml</code></td></tr>
+      <tr><td>Tempo</td><td>Metrics generator on</td><td>Config</td><td>Service graph and span metrics with no extra instrumentation</td><td><code>observability/values/tempo.yaml</code></td></tr>
+      <tr><td>SLOs and dashboards</td><td>Generated from YAML and Python</td><td>Code</td><td>5 SLOs across 8 windows, burn-rate alerts, 7 dashboards, all reviewable in git</td><td><code>observability/slo</code>, <code>dashboards</code></td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="request" aria-labelledby="h-req">
+  <h2 id="h-req"><span class="n">4 · One request</span>12.8 seconds, drawn to scale</h2>
+  <p>This is trace <code>a3e2297e…</code>, one synthetic passport through the public app, captured before the fixes. It's the strongest single slide you have, because it joins all three signals on one timeline. The table below it shows the same request type after the fixes.</p>
+  <figure>
+    <div class="fig">
+      <svg class="wf" viewBox="0 0 1000 372" role="img" aria-label="Timeline of one request. Envoy records 13.74 seconds. The API span lasts 12.83 seconds. Scheduling and the HTTP call finish in the first half second. The engine's first token appears at 1.4 seconds, but the client sees no content until 9.55 seconds.">
+        <!-- grid: x = 240 + 52.857t -->
+        <g class="gmid"><line x1="240" y1="48" x2="240" y2="326"/><line x1="345.7" y1="48" x2="345.7" y2="326"/><line x1="451.4" y1="48" x2="451.4" y2="326"/><line x1="557.1" y1="48" x2="557.1" y2="326"/><line x1="662.9" y1="48" x2="662.9" y2="326"/><line x1="768.6" y1="48" x2="768.6" y2="326"/><line x1="874.3" y1="48" x2="874.3" y2="326"/><line x1="980" y1="48" x2="980" y2="326"/></g>
+        <g class="xs" text-anchor="middle"><text x="240" y="344">0 s</text><text x="345.7" y="344">2</text><text x="451.4" y="344">4</text><text x="557.1" y="344">6</text><text x="662.9" y="344">8</text><text x="768.6" y="344">10</text><text x="874.3" y="344">12</text><text x="980" y="344">14</text></g>
+        <!-- markers -->
+        <line class="mark" x1="314.2" y1="30" x2="314.2" y2="326"/><text class="sm" x="314.2" y="22" text-anchor="middle" font-weight="600">engine first token, 1.40 s</text>
+        <line class="mark" x1="744.9" y1="30" x2="744.9" y2="326"/><text class="sm" x="744.9" y="22" text-anchor="middle" font-weight="600">client first content, 9.55 s</text>
+        <!-- rows -->
+        <text class="sm" x="8" y="66">Envoy access log (no span)</text><rect class="barL" x="241" y="53" width="726.3" height="18"/><text class="xs" x="250" y="66">13.74 s</text>
+        <text class="sm" x="8" y="98">POST /extract</text><rect class="barT" x="240" y="85" width="677.9" height="18"/><text class="inv" x="250" y="99">12.83 s</text>
+        <text class="sm" x="8" y="130">ocr.preprocess</text><rect class="barT" x="240.1" y="117" width="3" height="18"/><text class="xs" x="250" y="130">0.011 s</text>
+        <text class="sm" x="8" y="162">HTTP call, until headers</text><rect class="barT" x="240.8" y="149" width="22.1" height="18"/><text class="xs" x="322" y="162">0.42 s, because the 16 scheduler runs happen first</text>
+        <text class="sm" x="8" y="194">llm-d scheduler, 16 runs</text><rect class="barQ" x="241" y="181" width="15.8" height="18"/><text class="xs" x="322" y="194">0.02 s apart, one replica to choose from</text>
+        <text class="sm" x="8" y="226">vLLM llm_request</text><rect class="barT" x="258.3" y="213" width="658.8" height="18"/><text class="inv" x="268" y="227">12.46 s</text>
+        <text class="sm" x="8" y="258">vLLM phases</text><rect class="barMute" x="258.3" y="245" width="49.1" height="18"/><rect class="barQ" x="307.4" y="245" width="6.8" height="18"/><rect class="barThink" x="314.2" y="245" width="430.7" height="18"/><rect class="barOut" x="744.9" y="245" width="172.1" height="18"/><text class="inv" x="324" y="259">decode: reasoning, about 8.15 s</text><text class="inv" x="755" y="259">decode: answer, 3.26 s</text>
+        <text class="sm" x="8" y="290">ocr.parse and ocr.mrz</text><rect class="barT" x="917.3" y="277" width="3" height="18"/><text class="xs" x="910" y="290" text-anchor="end">0.008 s, result: valid</text>
+        <text class="xs" x="322" y="318">Grey: 0.93 s in no named phase. Amber: queue 0.043 s, prefill 0.085 s.</text>
+      </svg>
+    </div>
+    <figcaption>Blue and green split decode at the client's first content, so the reasoning share is calculated. The order of the unnamed 0.93 s relative to queue and prefill is assumed, and image processing is a likely cause that I haven't confirmed. Envoy's bar starts at 0 only for comparison, since it has no span to place it.</figcaption>
+  </figure>
+  <div class="cols">
+    <div><h3>What to point at</h3><ul>
+      <li>Decode is 11.41 s of 12.83 s. Queue is 43 ms. This request wasn't waiting for anything except generation.</li>
+      <li>649 tokens in 11.41 s is 57 tokens/s, which is exactly what people mistake for the GPU's limit.</li>
+      <li>Envoy took 0.92 s longer than the API, and at the time only the access log could see it. With edge spans, the new trace shows 0.81 s at the edge before the API starts.</li>
+    </ul></div>
+    <div><h3>What's odd</h3><ul>
+      <li>160 of the 168 spans came from the scheduler: 16 runs of 10 spans. Only 8 spans did the actual work. Fixed: now 23 spans per request.</li>
+      <li>Engine says first token at 1.06 s, client says 9.54 s. Both are correct, because they measure different things.</li>
+      <li>Reasoning takes about 464 of the 649 output tokens (estimated). No metric separates the two.</li>
+    </ul></div>
+  </div>
+  <h3>Before and after, 3 Nov 2026</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Per request</th><th>Before</th><th>After</th><th>The fix</th></tr></thead>
+    <tbody>
+      <tr><td>Spans</td><td class="num">168</td><td class="num">23</td><td>A one-rule model route</td></tr>
+      <tr><td>Scheduler runs</td><td class="num">16</td><td class="num">1</td><td>Envoy Gateway had 16 copies of the scheduler filter, one per route path</td></tr>
+      <tr><td>Where the trace starts</td><td>The API</td><td>Envoy, 0.81 s earlier</td><td>Envoy Gateway tracing</td></tr>
+      <tr><td>Request IDs</td><td>3 different ones</td><td>1, from Envoy to vLLM's <code>chatcmpl-</code> name</td><td>nginx and the API pass it on, Envoy keeps it on the inner hop</td></tr>
+      <tr><td>Engine logs from a span</td><td>None found</td><td>Lines from the span's time window</td><td>Logs named after their spans</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="signals" aria-labelledby="h-signals">
+  <h2 id="h-signals"><span class="n">5 · Metrics, logs and traces</span>The ones worth knowing</h2>
+  <h3><span class="sig M">M</span>Metrics</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Layer</th><th>Metric</th><th>What it tells you</th></tr></thead>
+    <tbody>
+      <tr><td>Application</td><td><code>ocr_extractions_total{outcome}</code></td><td>Success and each failure type. Drives availability</td></tr>
+      <tr><td>Application</td><td><code>ocr_extract_duration_seconds</code></td><td>What users wait for, with exemplars to one trace</td></tr>
+      <tr><td>Application</td><td><code>ocr_upstream_time_to_first_token_seconds</code></td><td>First content at the client, reasoning included</td></tr>
+      <tr><td>Application</td><td><code>gen_ai_client_token_usage</code></td><td>Tokens per request by type. Input is set by image dimensions</td></tr>
+      <tr><td>Quality</td><td><code>ocr_mrz_checks_total{result}</code></td><td>ICAO check digits: valid, invalid, missing, unparseable</td></tr>
+      <tr><td>Quality</td><td><code>ocr_mrz_field_agreement_total{field,agree}</code></td><td>Does the printed page match the validated MRZ?</td></tr>
+      <tr><td>Engine</td><td><code>vllm:num_requests_running</code>, <code>waiting</code></td><td>The clearest saturation signal. Nothing waited at 64 users</td></tr>
+      <tr><td>Engine</td><td><code>vllm:kv_cache_usage_perc</code></td><td>The real memory pressure. Alert above 90%; peaked at 22%</td></tr>
+      <tr><td>Engine</td><td><code>vllm:request_queue_time_seconds</code></td><td>Alert when p95 passes 1 s</td></tr>
+      <tr><td>Engine</td><td><code>vllm:request_prefill_time_seconds</code>, <code>decode_time</code></td><td>Reading the prompt versus generating</td></tr>
+      <tr><td>Engine</td><td><code>vllm:request_success_total{finished_reason}</code></td><td><code>length</code> is runaway reasoning: a request that returns no answer</td></tr>
+      <tr><td>Engine</td><td><code>vllm:num_preemptions_total</code></td><td>Requests evicted under memory pressure. Zero in every run</td></tr>
+      <tr><td>Routing</td><td><code>llm_d_epp_scheduler_e2e_duration_seconds</code></td><td>Cost of a routing decision. Counts were 16 times too high until the route fix</td></tr>
+      <tr><td>Edge</td><td><code>envoy_cluster_upstream_rq_timeout_total</code></td><td>Gateway timeouts the app never sees as its own failures</td></tr>
+      <tr><td>GPU</td><td><code>DCGM_FI_DEV_POWER_USAGE</code></td><td>The honest load signal: 105 W idle, 293 W with 40 users</td></tr>
+      <tr><td>GPU</td><td><code>DCGM_FI_DEV_CLOCKS_EVENT_REASONS</code>, <code>XID_ERRORS</code></td><td>Throttling and driver faults, the hardware layer's alerts</td></tr>
+      <tr><td>Derived</td><td><code>vllm:tokens_per_joule</code></td><td>Efficiency: generated tokens per unit of energy</td></tr>
+      <tr><td>Derived</td><td><code>slo:current_burn_rate:ratio</code></td><td>How fast each SLO is spending its budget</td></tr>
+      <tr><td>Platform</td><td><code>ocr:model_pod_time_to_ready_seconds</code></td><td>Cold start in one number</td></tr>
+      <tr><td>Pipeline</td><td><code>otelcol_receiver_refused_spans_total</code></td><td>The collector dropping data under memory pressure</td></tr>
+    </tbody>
+  </table></div>
+  <h3><span class="sig L">L</span>Logs</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Source in Loki</th><th>Real example</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      <tr><td><code>ocr-api</code></td><td><code>extract done in 12.821s</code> with <code>trace_id</code>, <code>request_id</code>, <code>outcome</code>, <code>mrz_result</code></td><td>Link to their trace by <code>trace_id</code>. Contain no passport fields</td></tr>
+      <tr><td><code>envoy</code></td><td><code>response_flags</code>, <code>duration</code>, <code>x-request-id</code>, <code>trace_id</code>, <code>downstream_remote_address: 190.99.216.0</code></td><td>The flag <code>UT</code> exposed the 15 s timeout. Shows internet scanners. Visitor IPs are now cut to their network</td></tr>
+      <tr><td><code>ocr-frontend</code></td><td><code>request_time</code>, <code>upstream_response_time</code>, and <code>client request body is buffered to a temporary file</code></td><td>Timing between edge and app. Every large upload touches nginx's disk</td></tr>
+      <tr><td><code>vllm</code></td><td><code>GPU KV cache size: 647,168 tokens, Maximum concurrency for 16,384 tokens per request: 39.50x</code></td><td>The engine stating its own capacity</td></tr>
+      <tr><td><code>vllm</code></td><td><code>init engine … took 160.86 s</code>, <code>Graph capturing finished in 13 secs</code>, <code>Loading weights took</code></td><td>Cold-start phases that no metric has. This found the slow disk</td></tr>
+      <tr><td><code>vllm</code></td><td><code>Engine 000: Avg generation throughput: 47.5 tokens/s, Running: 1 reqs … GPU KV cache usage: 0.3%</code></td><td>A metric disguised as a log, every 10 s. Handy, and most of this stream's volume</td></tr>
+      <tr><td><code>inference-scheduler</code></td><td><code>EPP received request</code> with <code>x-request-id</code></td><td>The scheduler's lines name the same request ID as the edge</td></tr>
+      <tr><td><code>alertmanager</code></td><td><code>{"receiver":"collector","status":"firing","alerts":[…]}</code></td><td>Alerts land beside the signals that fired them</td></tr>
+      <tr><td><code>k8s-events</code></td><td><code>Unhealthy</code> 26 times, then <code>LLMInferenceServiceReady</code></td><td>Failing probes are normal during start-up here. Alerting on them would be noise</td></tr>
+    </tbody>
+  </table></div>
+  <h3><span class="sig T">T</span>Traces</h3>
+  <div class="tw"><table>
+    <thead><tr><th>Span</th><th>Service</th><th>Attributes that matter</th></tr></thead>
+    <tbody>
+      <tr><td><code>ingress</code>, <code>router … egress</code>, <code>ExternalProcessor.Process</code></td><td>envoy</td><td><code>guid:x-request-id</code>, <code>upstream_cluster</code>, <code>response_flags</code>, <code>request_size</code>; the scheduler call as its own span</td></tr>
+      <tr><td><code>POST /extract</code></td><td>ocr-api</td><td><code>ocr.outcome</code>, <code>ocr.request_id</code>, status code</td></tr>
+      <tr><td><code>ocr.preprocess</code></td><td>ocr-api</td><td><code>ocr.image.input_bytes</code>, <code>sent_bytes</code>, <code>format</code></td></tr>
+      <tr><td><code>chat qwen3-5-9b</code></td><td>ocr-api</td><td><code>gen_ai.usage.input_tokens</code>, <code>output_tokens</code>, <code>gen_ai.response.finish_reasons</code>, <code>ocr.upstream.time_to_first_token</code></td></tr>
+      <tr><td><code>filter_endpoints</code>, <code>llm_d.epp.scorer.*</code>, <code>pick_endpoints</code></td><td>inference-scheduler</td><td><code>llm_d.epp.scorer.score.max</code>, <code>weight</code>, <code>llm_d.epp.picker.top_scores</code>: why this replica won</td></tr>
+      <tr><td><code>llm_request</code></td><td>vllm</td><td><code>gen_ai.latency.time_in_queue</code>, <code>time_in_model_prefill</code>, <code>time_in_model_decode</code>, <code>time_to_first_token</code></td></tr>
+      <tr><td><code>ocr.mrz</code></td><td>ocr-api</td><td><code>ocr.mrz.result</code>, the quality verdict on the trace itself</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="correlation" aria-labelledby="h-corr">
+  <h2 id="h-corr"><span class="n">6 · Context correlation</span>Every hop links now, after four fixes</h2>
+  <div class="tw"><table>
+    <thead><tr><th>From</th><th>To</th><th>Mechanism</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Latency panel</td><td>One slow trace</td><td>Exemplars recorded inside the span. Confirmed stored in Prometheus</td><td><span class="pill ok">works</span></td></tr>
+      <tr><td>Envoy span</td><td>API, scheduler and vLLM spans</td><td>W3C <code>traceparent</code> from Envoy through nginx and HTTPX, one trace across 4 services</td><td><span class="pill ok">fixed</span></td></tr>
+      <tr><td>API or Envoy span</td><td>Its logs</td><td>Grafana parses the JSON and matches <code>trace_id</code> exactly</td><td><span class="pill ok">works</span></td></tr>
+      <tr><td>Envoy log</td><td>nginx, API, scheduler logs and vLLM</td><td>One <code>x-request-id</code> from the edge. vLLM names its request <code>chatcmpl-&lt;same id&gt;</code></td><td><span class="pill ok">fixed</span></td></tr>
+      <tr><td>Any trace</td><td>Engine and GPU state</td><td>Grafana traces-to-metrics: same time window, not the same request</td><td><span class="pill part">by time only</span></td></tr>
+      <tr><td>vLLM or scheduler span</td><td>Their logs</td><td>Logs now carry the span's service name. They have no <code>trace_id</code>, so Grafana shows the span's time window for them only</td><td><span class="pill part">fixed, by time</span></td></tr>
+      <tr><td>Alert</td><td>The signals that fired it</td><td>Alerts are stored in Loki, so they sit on the same timeline</td><td><span class="pill ok">new</span></td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Sampling also affects correlation: an exemplar whose trace was dropped is a dead link. The lab keeps 100% of traces for that reason. A first version of the Grafana query, <code>or trace_id=""</code>, returned every API line, because the API's trace ID sits inside the JSON and isn't a label until it's parsed.</p>
+</section>
+
+<section id="workload" aria-labelledby="h-work">
+  <h2 id="h-work"><span class="n">7 · Workload behaviour</span>This doesn't behave like a web service</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Behaviour</th><th>Measured</th><th>What it means</th></tr></thead>
+    <tbody>
+      <tr><td>Throughput grows with concurrency</td><td class="num">52 to 1,305 tokens/s from 1 to 64 requests, thinking off, direct to model. Ceiling not found</td><td>vLLM batches. 57 tokens/s is per request and isn't the GPU's limit</td></tr>
+      <tr><td>Latency grows slowly under load</td><td class="num">40 users: p50 17.0 s, p95 18.8 s, 83/min. 64 users: p50 22.3 s, p95 24.4 s, 142/min</td><td>Nothing queued. Requests share the GPU, so each one generates a little slower while the total keeps rising</td></tr>
+      <tr><td>The GPU isn't the bottleneck yet</td><td class="num">KV cache 12% and 22%, 293 W, 53 °C, API CPU 13%</td><td>Plenty of headroom, which you can't see from GPU utilization</td></tr>
+      <tr><td>Rare runaway requests</td><td class="num">About 1 in 200 reasons until the token cap: <code>finish_reason=length</code>, about 30 s, no answer</td><td>A long-tail failure that returned HTTP 200 from the engine. One of 106 k6 requests failed this way</td></tr>
+      <tr><td>Quality has a price in tokens</td><td class="num">Thinking on: 0 of 320 field errors, about 3x tokens. Off: 13 of 320</td><td>Latency and cost get worse while quality gets better, and only a quality signal shows it</td></tr>
+      <tr><td>Input tokens are a formula</td><td class="num"><code>round(w/32) × round(h/32) + 166</code></td><td>Image dimensions set the cost, while file size doesn't. Resize before you send</td></tr>
+      <tr><td>Cost falls with load</td><td class="num">About $0.17 per 1,000 at 83/min, $0.10 at 142/min (calculated, VM only at $0.87/h)</td><td>Idle time is the expensive part of a self-hosted GPU</td></tr>
+      <tr><td>Idle isn't idle</td><td class="num">105 W and 39.5 GB of GPU memory with 0 requests</td><td>vLLM reserves memory up front, so memory used says nothing about load</td></tr>
+      <tr><td>Cold start dominates recovery</td><td class="num">Pod ready in 431 s on restart, 683 s on a fresh node. Disk read 31 MB/s took 447 s to load weights, and the faster disk took 117 s</td><td>Scale-to-zero and preemptible nodes are measured in minutes here</td></tr>
+      <tr><td>Temperature 0 isn't repeatable</td><td class="num">Same image: 613, 621 and 623 output tokens. Cause unknown</td><td>Don't build regression checks on exact output</td></tr>
+      <tr><td>Public means strangers</td><td>Within an hour of coming back, an unknown address sent a <code>POST</code> that got a 405</td><td>Real traffic differs from your load test, and it lands in your edge error ratios unless you filter it</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="misleading" aria-labelledby="h-mis">
+  <h2 id="h-mis"><span class="n">8 · Misleading signals</span>What it said, and what was true</h2>
+  <p class="note">The Cost dashboard used $0.40/h until 3 Nov, so cost screenshots from before then read less than half the real cost. The hosted API comparison still uses a placeholder model with example prices.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Signal</th><th>What it said</th><th>What was true</th><th>How it was caught</th></tr></thead>
+    <tbody>
+      <tr><td>GPU utilization</td><td>100%, so it's saturated</td><td>100% at 1 request and at 64, while throughput kept growing</td><td>Comparing it with tokens/s</td></tr>
+      <tr><td>GPU memory</td><td>39.5 GB used, so nearly full</td><td>Reserved at start, with 0 requests running</td><td>Reading it at idle</td></tr>
+      <tr><td>Tokens per second</td><td>57 is the maximum</td><td>That's one request on its own. The total reached 1,305 at 64 requests and was still rising</td><td>A concurrency sweep</td></tr>
+      <tr><td>Time to first token</td><td>Engine 1.06 s, inside the SLO</td><td>The client waited 9.54 s, since reasoning counts as tokens to the engine</td><td>Measuring on both sides</td></tr>
+      <tr><td>Engine health during an outage</td><td>vLLM: 1 request, 0 errors</td><td>While the model loaded, Envoy's model route returned 503 and the app answered 502, 25 times each. The engine can't report requests it never received</td><td>Comparing API with engine counters</td></tr>
+      <tr><td>Availability</td><td>100%</td><td>A real 502 happened. The counter first appeared at 1, so <code>rate()</code> saw no increase</td><td>Comparing one failure with the SLO</td></tr>
+      <tr><td>Empty SLO panels</td><td>No data, looks broken</td><td>Everything was fine. With no failures the "bad" series doesn't exist</td><td>Empty-query check on a healthy rebuild</td></tr>
+      <tr><td>28-day SLO</td><td>Could blank for 28 days</td><td>One idle 0/0 produced <code>NaN</code>, which poisons the average. The empty-query check counted it as data</td><td>Reading the raw output</td></tr>
+      <tr><td>KServe Ready</td><td><code>Ready=True</code></td><td>No model pod. With <code>maxUnavailable: 1</code>, a Deployment counts as available with zero pods</td><td>API appeared while the model downloaded</td></tr>
+      <tr><td>Visual agreement</td><td>85%, burning budget</td><td>0 real errors. The page prints COLOMBIA, the MRZ says COL, so nationality failed every time</td><td>The suspicious 6/7 ratio</td></tr>
+      <tr><td>MRZ valid</td><td>The fields are correct</td><td>Check digits don't cover names. An MRZ misread as OAKAFOR passed and overwrote the right OKAFOR</td><td>Scoring against ground truth</td></tr>
+      <tr><td>MRZ validity 80%</td><td>Model reads badly</td><td>0 of 320 model field errors in the same test. The proxy and the truth disagree, so don't treat either alone as accuracy</td><td>Scoring against ground truth</td></tr>
+      <tr><td>p95 latency</td><td>28.5 s</td><td>24.4 s. No histogram buckets between 20 and 30 s</td><td>Comparing with k6</td></tr>
+      <tr><td>Cold start</td><td>6,181 s</td><td>411 s. The name filter also matched controllers that had been running for hours</td><td>The number looked impossible</td></tr>
+      <tr><td>Load test</td><td>Clean</td><td>It used the model route. Through the app, Envoy's 15 s default cut requests off while vLLM reported them finished</td><td>Refusing to ignore one 504</td></tr>
+      <tr><td>Routing counts</td><td>16 decisions</td><td>One request. Envoy Gateway put 16 identical scheduler filters in the listener, one per route path to the InferencePool, and all of them ran</td><td>One trace, then Envoy's config dump</td></tr>
+      <tr><td>Alert config</td><td><code>helm upgrade</code> succeeded</td><td>Alertmanager kept its old config. The chart's default route named a receiver the new list dropped, and the only trace was one line in the operator's log</td><td>A test alert that never arrived</td></tr>
+      <tr><td>First weight load</td><td>Fast disk</td><td>The freshly downloaded file was still in memory. A real restart was slower</td><td>Timing a stop/start</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="uncommon" aria-labelledby="h-unc">
+  <h2 id="h-unc"><span class="n">9 · Uncommon things</span>What people probably haven't seen</h2>
+  <div class="cols">
+    <div><h3>Label-free ground truth</h3><p>ICAO check digits let you measure correctness in production with no labels and no second model. Most LLM apps have to build this. Ask the audience what their equivalent is: a schema, a checksum, a total that must add up.</p></div>
+    <div><h3>Scheduler decisions as spans</h3><p>Each scorer is a span with its weight and score, so "why this replica?" can be answered from a trace. With one replica the scores don't decide anything, so say that plainly.</p></div>
+    <div><h3>Telemetry that can't leak by accident</h3><p>Span attributes are fail-closed: a new <code>passport.surname</code> attribute is dropped at the collector, and <code>tools/pii-probe</code> proves it. The first version also deleted <code>service.name</code>, and Tempo lost every service. <code>redaction.*.count</code> on spans is the only sign that something was removed.</p></div>
+    <div><h3>Tail sampling meets slow requests</h3><p>The sampler decided 15 s after a trace's first span, but requests can run 30 s, and the collector counted 12 late spans after one restart. Lower the rate and late failures could be dropped. The wait is now 70 s, longer than the API's 60 s model timeout, and the "slow" rule moved from 8 s, which kept every thinking request, to 25 s.</p></div>
+    <div><h3>Testing your observability</h3><p>What worked: run every dashboard query and list the empty ones (79 of 83 had data, the other 4 were expected), then compare dashboards with k6, and stop and rebuild the lab. An empty-query check still missed <code>NaN</code>.</p></div>
+    <div><h3>What telemetry costs</h3><p>168 spans per request, 160 of them scheduler, until a route fix made it 23. 583 metric names at idle. <code>inference_*</code> and <code>llm_d_epp_*</code> look like two names for the same data (both read 16 attempts). The cardinality guard keeps request IDs off metrics; nothing yet limits span volume.</p></div>
+    <div><h3>Privacy in the plumbing</h3><p>The app logs no passport data, yet Envoy stored real visitor IPs, even though the API only sees a private address. The collector now cuts every public IPv4 to its network in logs and spans. Your access logs can be the personal data you forgot about.</p></div>
+    <div><h3>History across shutdowns</h3><p>A stopped lab kept its metrics: a marked count read 14 before and after the restart. A rebuild wipes them. For a preemptible GPU, decide on purpose which history has to outlive the node.</p></div>
+  </div>
+</section>
+
+<section id="notshown" aria-labelledby="h-not">
+  <h2 id="h-not"><span class="n">10 · What we aren't showing</span>Say these out loud, because it adds credibility</h2>
+  <div class="cols">
+    <div><h3>Not instrumented</h3><ul>
+      <li><strong>Browser experience.</strong> No RUM, so upload time and perceived wait are unknown.</li>
+      <li><strong>nginx spans.</strong> nginx passes the trace through but adds no span of its own; Envoy's router span covers it.</li>
+      <li><strong>Reasoning versus answer tokens.</strong> Only estimated from two timestamps.</li>
+      <li><strong>Node level.</strong> No node-exporter, so disk throughput isn't a metric. The slow disk was found with a log line and <code>dd</code>.</li>
+      <li><strong>Host logs.</strong> Bootstrap journal, kubelet and <code>dmesg</code> never reach Loki, yet they found many of the bugs.</li>
+      <li><strong>Image quality.</strong> No signal for blur, rotation or resolution, the likely causes of bad reads.</li>
+      <li><strong>Continuous profiling.</strong> No CPU or GPU profiles of the API or vLLM.</li>
+    </ul></div>
+    <div><h3>Can't be shown on this lab</h3><ul>
+      <li><strong>Real GPU activity.</strong> SM, tensor and DRAM activity crash the exporter on this VM, and that would be the real answer to "is the GPU busy?"</li>
+      <li><strong>Load balancing.</strong> One replica, so the balance panels have one line and the router has no choice to make.</li>
+      <li><strong>Autoscaling.</strong> One GPU, no scaling events.</li>
+      <li><strong>The throughput ceiling.</strong> Never reached at 64 requests.</li>
+      <li><strong>Thermal drift.</strong> Tests lasted minutes, so sustained heat and throttling are untested.</li>
+      <li><strong>Production quality.</strong> The accuracy data is 40 synthetic passports.</li>
+    </ul></div>
+    <div><h3>Built but not demonstrated yet</h3><ul>
+      <li><strong>Paging a person.</strong> Alerts now land in Loki, but nothing sends them to Slack or e-mail.</li>
+      <li><strong>SLO targets under real traffic.</strong> They were reset from lab measurements (25 s latency, 75% MRZ validity) and haven't met real users yet.</li>
+      <li><strong>Model loss under load.</strong> The Cold start dashboard is built for it, but it hasn't been recorded.</li>
+      <li><strong>Hosted comparison.</strong> The panel exists, with placeholder prices and no hosted traffic.</li>
+      <li><strong>Security signals.</strong> 401s and scanners are in the logs with no panel, and the public app has no HTTPS or rate limit.</li>
+    </ul></div>
+    <div><h3>Left out on purpose</h3><ul>
+      <li><strong>Prompts, images and model output.</strong> The price is real: you can't open a trace and read why one extraction went wrong. You can only rerun the image if you have it.</li>
+      <li><strong>Reasoning text.</strong> It may repeat passport data, so it's treated like the output.</li>
+      <li><strong>User feedback.</strong> The app has no corrections, which would be the best quality signal of all.</li>
+      <li><strong>A golden set in CI.</strong> Accuracy was scored by hand, so a model change wouldn't be caught automatically.</li>
+    </ul></div>
+  </div>
+</section>
+
+<section id="demo" aria-labelledby="h-demo">
+  <h2 id="h-demo"><span class="n">11 · Live demo</span>One path that shows everything</h2>
+  <p>Start the load first, since panels take a minute to fill. Keep a recording as a backup, because cold start alone is about 9 minutes.</p>
+  <pre><code>k6 run -e BASE_URL=http://&lt;public-ip&gt;/api -e SCENARIO=minute -e PEAK_USERS=40 loadtest/k6/ocr-users.js</code></pre>
+  <ol>
+    <li><strong>SLOs and quality:</strong> show latency under load, click an exemplar dot, and land on one real trace.</li>
+    <li><strong>The trace:</strong> open <code>llm_request</code> for queue, prefill and decode, then compare the two first-token numbers.</li>
+    <li><strong>Its logs:</strong> jump from the API or Envoy span to its logs on <code>trace_id</code>, and show there's no passport data in them. From the vLLM span, the same button shows the engine's lines from that moment.</li>
+    <li><strong>One ID:</strong> take <code>x-request-id</code> from the response header and search Loki for it: Envoy twice, nginx, the API, the scheduler, and <code>chatcmpl-</code> in the trace.</li>
+    <li><strong>Inference:</strong> show waiting at zero and KV cache low. The system is healthy and not saturated.</li>
+    <li><strong>GPU:</strong> put utilization next to generated tokens, the moment "100%" stops meaning anything.</li>
+    <li><strong>Routing:</strong> open a scorer span, then tell the story of the 16 runs per request and the one-line route fix.</li>
+    <li><strong>Cold start, recorded:</strong> delete the model pod during load and show errors, events and vLLM start-up lines on one screen.</li>
+  </ol>
+</section>
+</div>
