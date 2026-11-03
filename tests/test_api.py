@@ -170,3 +170,18 @@ def test_extra_body_reaches_the_engine(client, monkeypatch):
     assert _post(client).status_code == 200
     assert seen["chat_template_kwargs"] == {"enable_thinking": False}
     assert seen["response_format"] == {"type": "json_object"}
+
+
+def test_request_id_reaches_the_engine(client):
+    # Envoy's X-Request-ID must arrive at the model, so edge, API and engine share one ID.
+    seen = {}
+
+    def capture(request):
+        seen["rid"] = request.headers.get("x-request-id")
+        return httpx.Response(200, content=_sse(json.dumps(ANSWER)))
+    _use(capture)
+    r = client.post("/extract", files={"file": ("p.png", _png(), "image/png")},
+                    headers={"X-Request-ID": "edge-1234"})
+    assert r.status_code == 200
+    assert seen["rid"] == "edge-1234"
+    assert r.headers["x-request-id"] == "edge-1234"

@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from . import telemetry as tel
 from .schemas import ExtractResponse
-from .ocr import extract, AGREEMENT_FIELDS, MODEL_NAME, OCR_BACKEND, BadImageError, ModelOutputError, UpstreamError
+from .ocr import extract, AGREEMENT_FIELDS, MODEL_NAME, OCR_BACKEND, REQUEST_ID, BadImageError, ModelOutputError, UpstreamError
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ async def request_id(request: Request, call_next):
     # nginx forwards its $request_id; generate one when called directly.
     rid = request.headers.get("x-request-id") or uuid.uuid4().hex
     request.state.request_id = rid
+    REQUEST_ID.set(rid)
     tel.trace.get_current_span().set_attribute("ocr.request_id", rid)
     response = await call_next(request)
     response.headers["x-request-id"] = rid

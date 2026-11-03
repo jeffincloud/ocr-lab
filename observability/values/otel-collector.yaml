@@ -52,6 +52,12 @@ ports:
   jaeger-thrift: {enabled: false}
   jaeger-grpc: {enabled: false}
   zipkin: {enabled: false}
+  # Alertmanager's webhook (webhookevent/alerts in the collector config).
+  alerts:
+    enabled: true
+    containerPort: 8088
+    servicePort: 8088
+    protocol: TCP
 extraEnvs:
   - {name: LAB_ENVIRONMENT, value: gpu-lab}
   - {name: TRACE_SAMPLE_PERCENT, value: "100"}

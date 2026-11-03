@@ -43,8 +43,10 @@ case "$cmd" in
     init gpu; tf gpu destroy "$@"
     init base; tf base destroy "$@"
     ;;
-  stop)   nebius compute instance stop --id "$(gpu_id)" ;;
-  start)  nebius compute instance start --id "$(gpu_id)" ;;
+  # Print only the state: the full instance includes cloud-init, which holds the
+  # WireGuard server's private key.
+  stop)   nebius compute instance stop --id "$(gpu_id)" --format jsonpath='{.status.state}'; echo ;;
+  start)  nebius compute instance start --id "$(gpu_id)" --format jsonpath='{.status.state}'; echo ;;
   status) nebius compute instance get --id "$(gpu_id)" --format jsonpath='{.status.state}'; echo ;;
   ssh)    ssh -F "$SECRETS/ssh_config" ocr-gpu "$@" ;;
   kubeconfig)

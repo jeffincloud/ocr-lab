@@ -13,6 +13,13 @@ dashboards:
   label: grafana_dashboard
   folder: OCR Lab
 
+# Spans and trace-aware access logs from Envoy Gateway (templates/gateway-telemetry.yaml).
+gatewayTelemetry:
+  enabled: true
+  gatewayName: kserve-ingress-gateway
+  gatewayNamespace: kserve
+  collectorService: otel-collector-opentelemetry-collector
+
 # Components that only speak Prometheus exposition format. The OpenTelemetry
 # Collector scrapes them (prometheus receiver, node-local pod discovery) and
 # sends everything as OTLP, so Prometheus never scrapes anything itself: one
@@ -92,8 +99,9 @@ scrape:
 
 # Prices behind the cost-per-request panels. Set them to what you actually pay.
 pricing:
-  # Hourly price of the GPU instance (on-demand, all-in).
-  gpuHourlyUsd: 0.40
+  # Hourly price of the GPU instance, all-in. 0.87 is the preemptible Nebius L40S
+  # (gpu-l40s-a, 1gpu-16vcpu-64gb) this lab runs on.
+  gpuHourlyUsd: 0.87
   # Hosted-API prices per million tokens, keyed by the model name the API reports
   # (gen_ai.request.model). Add the model you compare against.
   apiModels:

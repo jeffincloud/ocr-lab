@@ -60,6 +60,13 @@ log "4/6 ocr-observability (collector config + scrape targets, rules, dashboards
 # shellcheck disable=SC2086
 helm upgrade --install ocr-observability "$REPO_ROOT/charts/observability" -n "$NS" $SCRAPE
 
+# Attach the chart's EnvoyProxy (edge spans, access log with trace_id) to the
+# Gateway. Envoy Gateway restarts the proxy, so the app blips for a few seconds.
+if kubectl -n kserve get gateway kserve-ingress-gateway >/dev/null 2>&1; then
+  kubectl -n kserve patch gateway kserve-ingress-gateway --type merge -p \
+    '{"spec":{"infrastructure":{"parametersRef":{"group":"gateway.envoyproxy.io","kind":"EnvoyProxy","name":"ocr-lab-telemetry"}}}}' >/dev/null
+fi
+
 log "5/6 OpenTelemetry Collector ${OTELCOL_VERSION}"
 helm upgrade --install otel-collector open-telemetry/opentelemetry-collector -n "$NS" \
   --version "$OTELCOL_VERSION" -f "$V/otel-collector.yaml" --wait --timeout 5m

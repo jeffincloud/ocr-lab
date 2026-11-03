@@ -115,7 +115,7 @@
     },
     {
       "type": "stat",
-      "title": "Latency \u2264 8 s",
+      "title": "Latency \u2264 25 s",
       "description": "Share of good events over 28 days. Objective 95.0%.",
       "datasource": {
         "type": "prometheus",
@@ -182,7 +182,7 @@
     {
       "type": "stat",
       "title": "MRZ check digits valid",
-      "description": "Share of good events over 28 days. Objective 98.0%.",
+      "description": "Share of good events over 28 days. Objective 75.0%.",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -216,11 +216,11 @@
               },
               {
                 "color": "orange",
-                "value": 0.975
+                "value": 0.745
               },
               {
                 "color": "green",
-                "value": 0.98
+                "value": 0.75
               }
             ]
           }
@@ -445,7 +445,7 @@
     },
     {
       "type": "stat",
-      "title": "Budget left \u00b7 Latency \u2264 8 s",
+      "title": "Budget left \u00b7 Latency \u2264 25 s",
       "description": "Share of the 28-day error budget not yet spent. Negative means the SLO is already missed.",
       "datasource": {
         "type": "prometheus",

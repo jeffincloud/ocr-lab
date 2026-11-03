@@ -39,18 +39,50 @@ receivers:
       k8s.container.cpu_limit_utilization: {enabled: true}
       k8s.container.memory_limit_utilization: {enabled: true}
       k8s.pod.cpu_limit_utilization: {enabled: true}
+  # Alertmanager posts firing and resolved alerts here, so alerts land in Loki
+  # beside the logs and traces they're about (service_name="alertmanager").
+  webhookevent/alerts:
+    endpoint: 0.0.0.0:8088
+    path: /alerts
+    health_path: /alerts/health
 
 processors:
   # Name the two log sources that arrive without a service.name, so Loki
   # doesn't file them under "unknown_service" or the container name:
   # Kubernetes events -> "k8s-events"; pod logs -> the pod's app.kubernetes.io/name.
+  # vLLM and the llm-d scheduler share a pod name label (the model's), so their
+  # logs get the service names their spans use. Tempo's "logs for this span" then
+  # finds them.
   transform/k8s_logs:
     error_mode: ignore
     log_statements:
       - context: resource
         statements:
+          - set(resource.attributes["service.name"], "vllm") where resource.attributes["service.name"] == nil and resource.attributes["kserve.io/component"] == "workload"
+          - set(resource.attributes["service.name"], "inference-scheduler") where resource.attributes["service.name"] == nil and resource.attributes["app.kubernetes.io/component"] == "llminferenceservice-router-scheduler"
           - set(resource.attributes["service.name"], "k8s-events") where resource.attributes["service.name"] == nil and resource.attributes["k8s.pod.name"] == nil
           - set(resource.attributes["service.name"], resource.attributes["app.kubernetes.io/name"]) where resource.attributes["service.name"] == nil and resource.attributes["app.kubernetes.io/name"] != nil
+
+  # Visitor IPs are personal data. Keep the network (first three octets) and drop
+  # the host, in every log line and span. 10.x (pods, the tunnel) stays whole, so
+  # in-cluster hops can still be followed.
+  transform/mask_ips:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - replace_pattern(log.body, "\\b([1-9]|1[1-9]|[2-9][0-9]|[12][0-9][0-9])\\.([0-9]{1,3})\\.([0-9]{1,3})\\.[0-9]{1,3}\\b", "$$1.$$2.$$3.0")
+          - replace_all_patterns(log.attributes, "value", "\\b([1-9]|1[1-9]|[2-9][0-9]|[12][0-9][0-9])\\.([0-9]{1,3})\\.([0-9]{1,3})\\.[0-9]{1,3}\\b", "$$1.$$2.$$3.0")
+    trace_statements:
+      - context: span
+        statements:
+          - replace_all_patterns(span.attributes, "value", "\\b([1-9]|1[1-9]|[2-9][0-9]|[12][0-9][0-9])\\.([0-9]{1,3})\\.([0-9]{1,3})\\.[0-9]{1,3}\\b", "$$1.$$2.$$3.0")
+
+  resource/alerts:
+    attributes:
+      - key: service.name
+        value: alertmanager
+        action: upsert
 
   k8sattributes:
     auth_type: serviceAccount
@@ -67,6 +99,12 @@ processors:
         - tag_name: app.kubernetes.io/name
           key: app.kubernetes.io/name
           from: pod
+        - tag_name: app.kubernetes.io/component
+          key: app.kubernetes.io/component
+          from: pod
+        - tag_name: kserve.io/component
+          key: kserve.io/component
+          from: pod
     pod_association:
       # Pod logs (filelog) carry the pod UID from their file path.
       - sources:
@@ -82,7 +120,7 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, k8sattributes, redaction/spans, transform/scrub, resource/lab, tail_sampling, batch]
+      processors: [memory_limiter, k8sattributes, redaction/spans, transform/scrub, transform/mask_ips, resource/lab, tail_sampling, batch]
       exporters: [otlp/tempo]
     metrics:
       receivers: [otlp, kubeletstats, prometheus/k8s]
@@ -90,5 +128,9 @@ service:
       exporters: [otlphttp/prometheus]
     logs:
       receivers: [otlp, filelog/pods, k8sobjects/events]
-      processors: [memory_limiter, k8sattributes, transform/k8s_logs, transform/scrub, resource/lab, batch]
+      processors: [memory_limiter, k8sattributes, transform/k8s_logs, transform/scrub, transform/mask_ips, resource/lab, batch]
+      exporters: [otlphttp/loki]
+    logs/alerts:
+      receivers: [webhookevent/alerts]
+      processors: [memory_limiter, resource/alerts, resource/lab, batch]
       exporters: [otlphttp/loki]

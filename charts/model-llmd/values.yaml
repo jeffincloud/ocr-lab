@@ -106,3 +106,12 @@ mock:
   resources:
     requests: {cpu: 200m, memory: 256Mi}
     limits: {cpu: "1", memory: 512Mi}
+
+# Model route. chatCompletionsOnly replaces KServe's default route (16 paths to the
+# InferencePool, so the scheduler ran 16 times per request) with the one path the
+# API uses. Set it to false for the completions, responses or messages APIs.
+route:
+  chatCompletionsOnly: true
+  gateway:
+    name: kserve-ingress-gateway
+    namespace: kserve

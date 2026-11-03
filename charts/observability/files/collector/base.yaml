@@ -71,6 +71,8 @@ processors:
       - '^gen_ai\.latency\.'
       - '^ocr\.(outcome|request_id|image\.(input_bytes|sent_bytes|format)|mrz\.result|upstream\.(request_id|time_to_first_token|ratelimit\.remaining\.[a-z_]+))$'
       - '^llm_d\.'
+      # Envoy Gateway's spans. peer.address (the visitor's IP) stays out.
+      - '^(guid:x-request-id|http\.url|http\.protocol|upstream_cluster(\.name)?|upstream_address|response_flags|response_size|request_size|component|downstream_cluster|user_agent)$'
       - '^k8s\.'
     summary: info
 
@@ -112,8 +114,11 @@ processors:
   # Keep every error and every slow trace; sample the rest. Exemplars point at
   # trace IDs, so the default keeps 100% in the lab to keep every exemplar
   # clickable. Lower TRACE_SAMPLE_PERCENT for long soak runs.
+  # decision_wait must outlast the slowest request: the API gives the model 60 s,
+  # and with 15 s an error at second 30 arrived after the trace had been judged.
+  # "slow" matches the 25 s latency SLO; at 8 s it kept every thinking request.
   tail_sampling:
-    decision_wait: 15s
+    decision_wait: 70s
     num_traces: 50000
     policies:
       - name: errors
@@ -121,7 +126,7 @@ processors:
         status_code: {status_codes: [ERROR]}
       - name: slow
         type: latency
-        latency: {threshold_ms: 8000}
+        latency: {threshold_ms: 25000}
       - name: baseline
         type: probabilistic
         probabilistic:

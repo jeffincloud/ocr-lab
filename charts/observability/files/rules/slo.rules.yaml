@@ -130,7 +130,7 @@ groups:
   rules:
   - record: slo:sli_error:ratio_rate5m
     expr: |-
-      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[5m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[5m])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[5m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[5m])))
       /
       (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[5m])))) >= 0
     labels: &id002
@@ -138,37 +138,37 @@ groups:
       layer: application
   - record: slo:sli_error:ratio_rate30m
     expr: |-
-      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[30m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[30m])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[30m])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[30m])))
       /
       (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[30m])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate1h
     expr: |-
-      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[1h])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[1h])))
       /
       (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1h])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate2h
     expr: |-
-      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[2h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[2h])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[2h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[2h])))
       /
       (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[2h])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate6h
     expr: |-
-      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[6h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[6h])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[6h])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[6h])))
       /
       (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[6h])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate1d
     expr: |-
-      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[1d])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[1d])))
       /
       (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[1d])))) >= 0
     labels: *id002
   - record: slo:sli_error:ratio_rate3d
     expr: |-
-      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[3d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[3d])))
+      ((sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[3d])) - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[3d])))
       /
       (sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[3d])))) >= 0
     labels: *id002
@@ -210,7 +210,7 @@ groups:
       burn_window: 1h/5m
     annotations:
       summary: ocr-latency is burning its error budget 14.4x too fast (1h/5m windows)
-      description: Successful extractions answered within 8 s, measured inside the API.
+      description: Successful extractions answered within 25 s, measured inside the API.
   - alert: SLOBurnOcrLatency6H
     expr: |-
       (slo:sli_error:ratio_rate6h{slo="ocr-latency"} > (6 * 0.05))
@@ -223,7 +223,7 @@ groups:
       burn_window: 6h/30m
     annotations:
       summary: ocr-latency is burning its error budget 6x too fast (6h/30m windows)
-      description: Successful extractions answered within 8 s, measured inside the API.
+      description: Successful extractions answered within 25 s, measured inside the API.
   - alert: SLOBurnOcrLatency1D
     expr: |-
       (slo:sli_error:ratio_rate1d{slo="ocr-latency"} > (3 * 0.05))
@@ -236,7 +236,7 @@ groups:
       burn_window: 1d/2h
     annotations:
       summary: ocr-latency is burning its error budget 3x too fast (1d/2h windows)
-      description: Successful extractions answered within 8 s, measured inside the API.
+      description: Successful extractions answered within 25 s, measured inside the API.
   - alert: SLOBurnOcrLatency3D
     expr: |-
       (slo:sli_error:ratio_rate3d{slo="ocr-latency"} > (1 * 0.05))
@@ -249,7 +249,7 @@ groups:
       burn_window: 3d/6h
     annotations:
       summary: ocr-latency is burning its error budget 1x too fast (3d/6h windows)
-      description: Successful extractions answered within 8 s, measured inside the API.
+      description: Successful extractions answered within 25 s, measured inside the API.
 - name: slo-sli-ocr-mrz-validity
   interval: 30s
   rules:
@@ -304,10 +304,10 @@ groups:
   interval: 30s
   rules:
   - record: slo:objective:ratio
-    expr: vector(0.98)
+    expr: vector(0.75)
     labels: *id003
   - record: slo:error_budget:ratio
-    expr: vector(0.02)
+    expr: vector(0.25)
     labels: *id003
   - record: slo:current_burn_rate:ratio
     expr: |-
@@ -325,9 +325,9 @@ groups:
   rules:
   - alert: SLOBurnOcrMrzValidity1H
     expr: |-
-      (slo:sli_error:ratio_rate1h{slo="ocr-mrz-validity"} > (14.4 * 0.02))
+      (slo:sli_error:ratio_rate1h{slo="ocr-mrz-validity"} > (14.4 * 0.25))
       and
-      (slo:sli_error:ratio_rate5m{slo="ocr-mrz-validity"} > (14.4 * 0.02))
+      (slo:sli_error:ratio_rate5m{slo="ocr-mrz-validity"} > (14.4 * 0.25))
     labels:
       slo: ocr-mrz-validity
       layer: quality
@@ -339,9 +339,9 @@ groups:
         MRZ almost always breaks a check digit.'
   - alert: SLOBurnOcrMrzValidity6H
     expr: |-
-      (slo:sli_error:ratio_rate6h{slo="ocr-mrz-validity"} > (6 * 0.02))
+      (slo:sli_error:ratio_rate6h{slo="ocr-mrz-validity"} > (6 * 0.25))
       and
-      (slo:sli_error:ratio_rate30m{slo="ocr-mrz-validity"} > (6 * 0.02))
+      (slo:sli_error:ratio_rate30m{slo="ocr-mrz-validity"} > (6 * 0.25))
     labels:
       slo: ocr-mrz-validity
       layer: quality
@@ -353,9 +353,9 @@ groups:
         MRZ almost always breaks a check digit.'
   - alert: SLOBurnOcrMrzValidity1D
     expr: |-
-      (slo:sli_error:ratio_rate1d{slo="ocr-mrz-validity"} > (3 * 0.02))
+      (slo:sli_error:ratio_rate1d{slo="ocr-mrz-validity"} > (3 * 0.25))
       and
-      (slo:sli_error:ratio_rate2h{slo="ocr-mrz-validity"} > (3 * 0.02))
+      (slo:sli_error:ratio_rate2h{slo="ocr-mrz-validity"} > (3 * 0.25))
     labels:
       slo: ocr-mrz-validity
       layer: quality
@@ -367,9 +367,9 @@ groups:
         MRZ almost always breaks a check digit.'
   - alert: SLOBurnOcrMrzValidity3D
     expr: |-
-      (slo:sli_error:ratio_rate3d{slo="ocr-mrz-validity"} > (1 * 0.02))
+      (slo:sli_error:ratio_rate3d{slo="ocr-mrz-validity"} > (1 * 0.25))
       and
-      (slo:sli_error:ratio_rate6h{slo="ocr-mrz-validity"} > (1 * 0.02))
+      (slo:sli_error:ratio_rate6h{slo="ocr-mrz-validity"} > (1 * 0.25))
     labels:
       slo: ocr-mrz-validity
       layer: quality

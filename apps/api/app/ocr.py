@@ -1,4 +1,5 @@
 import base64
+import contextvars
 import datetime as dt
 import io
 import json
@@ -69,6 +70,10 @@ OPENAI_EXTRA_BODY = json.loads(os.getenv("OPENAI_EXTRA_BODY") or "{}")
 OPENAI_MAX_TOKENS = int(os.getenv("OPENAI_MAX_TOKENS", "1024"))
 
 MODEL_NAME = OLLAMA_MODEL if OCR_BACKEND == "ollama" else OPENAI_MODEL
+
+# The edge's request ID, set by main.py and sent on to the model. vLLM names its
+# request after it, so one ID follows a request from Envoy to the engine.
+REQUEST_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("request_id", default=None)
 AGREEMENT_FIELDS = ("surname", "given_names", "passport_number", "date_of_birth", "sex", "date_of_expiry")
 
 # One pooled client per process. A new client per request would pay a TCP
@@ -300,6 +305,8 @@ def _extract_openai(image_bytes: bytes, image_format: str) -> Completion:
     started = time.perf_counter()
     url = f"{OPENAI_BASE_URL.rstrip('/')}/v1/chat/completions"
     headers = {"Authorization": f"Bearer {OPENAI_API_KEY}"}
+    if REQUEST_ID.get():
+        headers["X-Request-ID"] = REQUEST_ID.get()
     try:
         with _client.stream("POST", url, json=body, headers=headers) as r:
             attrs = _record_ratelimits(r.headers)

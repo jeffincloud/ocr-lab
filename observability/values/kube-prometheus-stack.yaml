@@ -49,6 +49,24 @@ alertmanager:
   enabled: true
   serviceMonitor:
     selfMonitor: false
+  # Alerts go to the collector, which stores them in Loki (service_name="alertmanager"),
+  # so they show up in Grafana next to the signals that fired them. Add a Slack or
+  # e-mail receiver here to page a person.
+  config:
+    route:
+      receiver: collector
+      group_by: [alertname, slo]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+    receivers:
+      # The chart's default route still sends Watchdog here; without it the
+      # operator rejects the whole config and keeps the old one.
+      - name: "null"
+      - name: collector
+        webhook_configs:
+          - url: http://otel-collector-opentelemetry-collector.monitoring.svc:8088/alerts
+            send_resolved: true
 
 # The default rules alert on node-exporter/kubelet series that no longer exist here.
 defaultRules:
@@ -120,7 +138,10 @@ grafana:
           spanEndTimeShift: "2m"
           filterByTraceID: true
           customQuery: true
-          query: '{service_name="$${__span.tags["service.name"]}"} | trace_id="$${__span.traceId}"'
+          # API and Envoy logs carry trace_id and match exactly. vLLM and the llm-d
+          # scheduler log without it, so for them this returns their lines from the
+          # span's time window (the scheduler's lines name the request's x-request-id).
+          query: '{service_name="$${__span.tags["service.name"]}"} | json | trace_id="$${__span.traceId}" or (trace_id="" and service_name=~"vllm|inference-scheduler")'
         tracesToMetrics:
           datasourceUid: prometheus
           spanStartTimeShift: "-5m"

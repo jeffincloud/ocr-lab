@@ -151,8 +151,8 @@ def slo_board():
               "Is the OCR service doing its job? Availability, latency and correctness against their SLOs, "
               "with error budgets and burn rates. Start here.", ["slo"])
     b.row("Service level objectives (28-day window)")
-    slos = [("ocr-availability", "Availability", 0.995), ("ocr-latency", "Latency ≤ 8 s", 0.95),
-            ("ocr-mrz-validity", "MRZ check digits valid", 0.98),
+    slos = [("ocr-availability", "Availability", 0.995), ("ocr-latency", "Latency ≤ 25 s", 0.95),
+            ("ocr-mrz-validity", "MRZ check digits valid", 0.75),
             ("ocr-visual-agreement", "Visual fields agree with MRZ", 0.97),
             ("inference-ttft", "Engine TTFT ≤ 2.5 s", 0.95)]
     widths = [5, 5, 5, 5, 4]

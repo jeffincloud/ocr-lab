@@ -1,0 +1,90 @@
+{{- if .Values.gatewayTelemetry.enabled }}
+{{- $g := .Values.gatewayTelemetry }}
+# Envoy Gateway's proxy: spans for every request at the edge and on the model
+# route, and an access log that carries the trace ID. Without it the trace starts
+# at the API and upload time is invisible. observability/install.sh attaches this
+# to the Gateway (spec.infrastructure.parametersRef).
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: ocr-lab-telemetry
+  namespace: {{ $g.gatewayNamespace }}
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+spec:
+  telemetry:
+    tracing:
+      samplingRate: 100
+      provider:
+        type: OpenTelemetry
+        # Same name as the access logs in Loki, so a span finds its log lines.
+        serviceName: envoy
+        backendRefs:
+          - name: {{ $g.collectorService }}
+            namespace: {{ .Release.Namespace }}
+            port: 4317
+    accessLog:
+      settings:
+        - format:
+            type: JSON
+            json:
+              start_time: "%START_TIME%"
+              method: "%REQ(:METHOD)%"
+              x-envoy-origin-path: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+              protocol: "%PROTOCOL%"
+              response_code: "%RESPONSE_CODE%"
+              response_flags: "%RESPONSE_FLAGS%"
+              response_code_details: "%RESPONSE_CODE_DETAILS%"
+              bytes_received: "%BYTES_RECEIVED%"
+              bytes_sent: "%BYTES_SENT%"
+              duration: "%DURATION%"
+              x-envoy-upstream-service-time: "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%"
+              x-forwarded-for: "%REQ(X-FORWARDED-FOR)%"
+              user-agent: "%REQ(USER-AGENT)%"
+              x-request-id: "%REQ(X-REQUEST-ID)%"
+              ":authority": "%REQ(:AUTHORITY)%"
+              upstream_host: "%UPSTREAM_HOST%"
+              upstream_cluster: "%UPSTREAM_CLUSTER%"
+              downstream_remote_address: "%DOWNSTREAM_REMOTE_ADDRESS%"
+              route_name: "%ROUTE_NAME%"
+              trace_id: "%TRACE_ID%"
+          sinks:
+            - type: File
+              file:
+                path: /dev/stdout
+---
+# Keep the X-Request-ID the API sends on its call to the model. By default Envoy
+# replaces it on that inner hop, and vLLM names its request after whatever arrives.
+# A visitor can now choose their own ID at the edge; it's only used to join logs.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: ocr-lab-request-id
+  namespace: {{ $g.gatewayNamespace }}
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: {{ $g.gatewayName }}
+  headers:
+    requestID: PreserveOrGenerate
+---
+# The proxy's namespace may send spans to the collector in this one.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: envoy-proxy-to-collector
+  labels:
+    {{- include "obs.labels" . | nindent 4 }}
+spec:
+  from:
+    - group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      namespace: {{ $g.gatewayNamespace }}
+  to:
+    - group: ""
+      kind: Service
+      name: {{ $g.collectorService }}
+{{- end }}

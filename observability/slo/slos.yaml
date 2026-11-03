@@ -6,9 +6,10 @@
 # SLI recording rules for several windows, error-budget gauges and
 # multi-window, multi-burn-rate alerts (Google SRE workbook, chapter 5).
 #
-# Start with these targets, run the baseline load test on the real GPU, then
-# tighten or loosen them from measured data. An SLO nobody can meet, or one
-# that is always green, teaches nothing.
+# Targets reset on 2026-11-02 from the L40S runs with thinking on: a lone request
+# takes about 13 s, p95 was 18.8 s at 40 users and 24.4 s at 64, and MRZ check
+# digits passed on about 80% of 40 deliberately degraded synthetic passports.
+# An SLO nobody can meet, or one that is always green, teaches nothing.
 
 window: 28d
 
@@ -24,11 +25,11 @@ slos:
 
   - name: ocr-latency
     layer: application
-    description: Successful extractions answered within 8 s, measured inside the API.
+    description: Successful extractions answered within 25 s, measured inside the API.
     objective: 95
     bad: >-
       sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[{{window}}]))
-      - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"8(\\.0)?"}[{{window}}]))
+      - sum(rate(ocr_extract_duration_seconds_bucket{outcome="ok",le=~"25(\\.0)?"}[{{window}}]))
     total: sum(rate(ocr_extract_duration_seconds_count{outcome="ok"}[{{window}}]))
 
   - name: ocr-mrz-validity
@@ -36,7 +37,9 @@ slos:
     description: >-
       Extractions whose MRZ passes ICAO 9303 check digits. Label-free ground
       truth: a wrong character in the MRZ almost always breaks a check digit.
-    objective: 98
+    # Measured about 80% on degraded synthetic images, where the model made no field
+    # errors, so this proxy under-reads quality. 75% alerts on a real drop only.
+    objective: 75
     bad: sum(rate(ocr_mrz_checks_total{result!="valid"}[{{window}}])) or vector(0)
     total: sum(rate(ocr_mrz_checks_total[{{window}}]))
 
