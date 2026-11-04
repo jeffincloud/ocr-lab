@@ -2,7 +2,9 @@
 # graph are remote-written into Prometheus with exemplars.
 tempo:
   reportingEnabled: false
-  retention: 72h
+  # 30 days, so the lab's whole history can be compared. Traces are small here
+  # (about 23 spans per request) against a 20 Gi volume.
+  retention: 720h
   metricsGenerator:
     enabled: true
     remoteWriteUrl: http://kps-prometheus.monitoring.svc:9090/api/v1/write

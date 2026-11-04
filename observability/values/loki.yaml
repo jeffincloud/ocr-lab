@@ -18,7 +18,9 @@ loki:
           period: 24h
   limits_config:
     allow_structured_metadata: true
-    retention_period: 168h
+    # 30 days, like Tempo and Prometheus. Only enforced if the compactor's
+    # retention_enabled is set; it isn't, so today logs are kept until the disk fills.
+    retention_period: 720h
 singleBinary:
   replicas: 1
   persistence:

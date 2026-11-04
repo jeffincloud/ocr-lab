@@ -10,7 +10,8 @@ fullnameOverride: kps
 
 prometheus:
   prometheusSpec:
-    retention: 15d
+    # 30 days, like Tempo and Loki, so the lab's whole history lines up.
+    retention: 30d
     retentionSize: 25GB
     # Without this, metrics live on an emptyDir and are lost when the pod is recreated.
     # local-path keeps them on the node's boot disk, so they survive a stop or
