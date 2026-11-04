@@ -11,6 +11,8 @@ terraform.tfvars
 # Secrets — block anything that looks like a credential
 *.json
 !charts/observability/files/dashboards/*.json
+# Measured results behind the talk visuals (checked: no keys, synthetic passports only)
+!talk/visuals/source/data/*.json
 !package.json
 !package-lock.json
 !tsconfig.json

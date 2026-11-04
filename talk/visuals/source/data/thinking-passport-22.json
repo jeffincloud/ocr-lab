@@ -1,0 +1,30 @@
+{
+ "on": {
+  "reasoning": "Based on the visual content of the passport image, I will scan for the specific fields requested.\n\n1.  **Surname:** Located under \"Surname / Nom / Apellidos\". The text is \"SOUZA\".\n2.  **Given Names:** Located under \"Given names / Pr\u00e9noms / Nombres\". The text is \"ALICE MIGUEL\".\n3.  **Passport Number:** Located on the right side under \"Passport No. / No. du passeport\". The text is \"R60471393\".\n4.  **Nationality:** Located under \"Nationality / Nationalit\u00e9\". The text is \"BRAZIL\".\n5.  **Date of Birth:** Located under \"Date of birth / Date de naissance\". The text is \"10 MAR/MAR 43\". I need to convert this to YYYY-MM-DD format. \"MAR\" is March, \"43\" implies 1943. So, 1943-03-10.\n6.  **Sex:** Located under \"Sex / Sexe\". The text is \"M\".\n7.  **Date of Issue:** Located under \"Date of issue / Date de d\u00e9livrance\". The text is \"31 AUG/AUG 19\". This implies 1919. So, 1919-08-31.\n8.  **Date of Expiry:** Located under \"Date of expiry / Date d'expiration\". The text is \"30 AUG/AUG 29\". This implies 1929. So, 1929-08-30.\n9.  **Issuing Authority:** Located under \"Authority / Autorit\u00e9\". The text is \"DEPARTMENT OF STATE\".\n10. **MRZ Line 1:** Located at the bottom. The text is \"P<BRASOUZA<<ALICE<MIGUEL<<<<<<<<<<<<<<<<<<<<\".\n11. **MRZ Line 2:** Located at the very bottom. The text is \"R604713938BRA4303101M2908306<<<<<<<<<<<<<<02\".\n\nNow I will format this into the requested JSON structure.\n",
+  "content": "{\"surname\": \"SOUZA\", \"given_names\": \"ALICE MIGUEL\", \"passport_number\": \"R60471393\", \"nationality\": \"BRAZIL\", \"date_of_birth\": \"1943-03-10\", \"sex\": \"M\", \"date_of_issue\": \"1919-08-31\", \"date_of_expiry\": \"1929-08-30\", \"issuing_authority\": \"DEPARTMENT OF STATE\", \"mrz_line1\": \"P<BRASOUZA<<ALICE<MIGUEL<<<<<<<<<<<<<<<<<<<<\", \"mrz_line2\": \"R604713938BRA4303101M2908306<<<<<<<<<<<<<<02\"}",
+  "usage": {
+   "prompt_tokens": 616,
+   "total_tokens": 1267,
+   "completion_tokens": 651,
+   "prompt_tokens_details": null,
+   "completion_tokens_details": {
+    "reasoning_tokens": 476
+   }
+  },
+  "finish": "stop"
+ },
+ "off": {
+  "reasoning": null,
+  "content": "{\n  \"surname\": \"SOUZA\",\n  \"given_names\": \"ALICE MIGUEL\",\n  \"passport_number\": \"R60471393\",\n  \"nationality\": \"BRAZIL\",\n  \"date_of_birth\": \"1943-03-10\",\n  \"sex\": \"M\",\n  \"date_of_issue\": \"1919-08-31\",\n  \"date_of_expiry\": \"1929-08-30\",\n  \"issuing_authority\": \"DEPARTMENT OF STATE\",\n  \"mrz_line1\": \"P<BRASOUZA<<ALICE<MIGUEL<<<<<<<<<<<<<<<<<<<<\",\n  \"mrz_line2\": \"R604713938BRA4303101M2908306<<<<<<<<<<<<02\"\n}",
+  "usage": {
+   "prompt_tokens": 618,
+   "total_tokens": 816,
+   "completion_tokens": 198,
+   "prompt_tokens_details": null,
+   "completion_tokens_details": {
+    "reasoning_tokens": 0
+   }
+  },
+  "finish": "stop"
+ }
+}

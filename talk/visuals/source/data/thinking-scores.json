@@ -1,0 +1,134 @@
+{
+ "think_on.json": {
+  "start": 1793684393,
+  "end": 1793684480,
+  "n": 40,
+  "ok": 37,
+  "field_errors": 4,
+  "fields_checked": 296,
+  "errors_by_field": {
+   "nationality": 4
+  },
+  "p50": 14.097936153411865,
+  "p95": 14.796992063522339,
+  "wall": 87,
+  "out_tokens_mean": 645.3243243243244,
+  "out_tokens_max": 733,
+  "in_tokens_mean": 635.2432432432432,
+  "mrz": {
+   "valid": 33,
+   "invalid": 4
+  },
+  "failures": [
+   [
+    "passport-00009.png",
+    "502",
+    "{'detail': 'model returned empty response'}"
+   ],
+   [
+    "passport-00033.png",
+    "502",
+    "{'detail': 'model returned empty response'}"
+   ],
+   [
+    "passport-00034.png",
+    "502",
+    "{'detail': 'model output is not valid passport JSON (JSONDecodeError)'}"
+   ]
+  ],
+  "examples": [
+   [
+    "passport-00003.png",
+    "nationality",
+    "UNITED STATES OF AMERICA",
+    "USA"
+   ],
+   [
+    "passport-00021.png",
+    "nationality",
+    "UNITED STATES OF AMERICA",
+    "USA"
+   ],
+   [
+    "passport-00024.png",
+    "nationality",
+    "CANADA",
+    "CAN"
+   ],
+   [
+    "passport-00032.png",
+    "nationality",
+    "UNITED STATES OF AMERICA",
+    "USA"
+   ]
+  ]
+ },
+ "think_off.json": {
+  "start": 1793684591,
+  "end": 1793684620,
+  "n": 40,
+  "ok": 40,
+  "field_errors": 7,
+  "fields_checked": 320,
+  "errors_by_field": {
+   "nationality": 5,
+   "date_of_issue": 1,
+   "surname": 1
+  },
+  "p50": 5.219842195510864,
+  "p95": 5.652668237686157,
+  "wall": 29,
+  "out_tokens_mean": 203.275,
+  "out_tokens_max": 220,
+  "in_tokens_mean": 642.325,
+  "mrz": {
+   "invalid": 5,
+   "valid": 35
+  },
+  "failures": [],
+  "examples": [
+   [
+    "passport-00000.png",
+    "nationality",
+    "COLOMBIA",
+    "COL"
+   ],
+   [
+    "passport-00004.png",
+    "nationality",
+    "UTOPIA",
+    "UTO"
+   ],
+   [
+    "passport-00005.png",
+    "nationality",
+    "COLOMBIA",
+    "COL"
+   ],
+   [
+    "passport-00011.png",
+    "nationality",
+    "INDIA",
+    "IND"
+   ],
+   [
+    "passport-00022.png",
+    "date_of_issue",
+    "1919-08-31",
+    "2019-08-31"
+   ],
+   [
+    "passport-00029.png",
+    "surname",
+    "GRUBER",
+    "GRUBER GRUBER"
+   ],
+   [
+    "passport-00034.png",
+    "nationality",
+    "REPUBLIC OF KOREA",
+    "KOR"
+   ]
+  ]
+ }
+}
