@@ -9,6 +9,10 @@ kubernetes:
 extraEnv:
   - name: DCGM_EXPORTER_KUBERNETES
     value: "true"
+  # New readings every 5 s. The default, 30 s, made Grafana lag a load change by up
+  # to 40 s and miss anything shorter; power is one reading, not an average.
+  - name: DCGM_EXPORTER_INTERVAL
+    value: "5000"
 # The default counters include profiling fields, which crash the exporter on the
 # Nebius VM; see charts/observability/files/dcgm/counters.csv.
 extraConfigMapVolumes:

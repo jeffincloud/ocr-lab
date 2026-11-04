@@ -69,6 +69,8 @@ scrape:
     labels:
       app.kubernetes.io/name: dcgm-exporter
     port: 9400
+    # Matches the exporter's 5 s collect interval (observability/values/dcgm-exporter.yaml).
+    interval: 5s
     honorLabels: true
   # kube-state-metrics (from kube-prometheus-stack): pod creation and ready
   # times for the cold-start rules. Not available as an OTel receiver.

@@ -154,6 +154,9 @@ Run these in Grafana → **Explore**, or with `kubectl` where shown.
 - Dashboard **GPU · DCGM** → "Utilization vs real work". Compare with tokens/s on **Inference
   engine · vLLM**. Time ranges with data: 3 Nov 22:54–23:01 (ramp 2→24) and 23:32–23:38 (1 vs 24).
 - PromQL `count(DCGM_FI_DEV_POWER_USAGE)` = 1 (no double collection).
+- DCGM matches `nvidia-smi --query-gpu=utilization.gpu,power.draw,temperature.gpu,memory.used --format=csv`
+  on the VM. Since 4 Nov it reads every 5 s; before that every 30 s, so runs before 4 Nov have
+  coarse GPU data (the "83%" for one request rests on about 3 readings).
 
 **Kubernetes**
 - PromQL `ocr:model_pod_time_to_ready_seconds` – cold start, 400–700 s.
