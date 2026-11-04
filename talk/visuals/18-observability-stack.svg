@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1700" height="1150" viewBox="0 0 1700 1150">
+<rect x="0.0" y="0.0" width="1700.0" height="1150.0" rx="0" fill="#FFFFFF" stroke="none" stroke-width="1" />
+<text x="30.0" y="50.0" font-family="Arial, Helvetica, sans-serif" font-size="30" fill="#111827" font-weight="bold" text-anchor="start">How the OCR lab is observed: one OpenTelemetry pipeline, three signals, one request ID</text>
+<circle cx="36" cy="76" r="6" fill="#50B432"/>
+<text x="48.0" y="81.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">traces</text>
+<circle cx="128" cy="76" r="6" fill="#0086FF"/>
+<text x="140.0" y="81.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">metrics</text>
+<circle cx="220" cy="76" r="6" fill="#ED561B"/>
+<text x="232.0" y="81.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">logs</text>
+<line x1="312.0" y1="76.0" x2="350.0" y2="76.0" stroke="#4B5563" stroke-width="2.5" />
+<text x="358.0" y="81.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">pushed over OTLP</text>
+<line x1="496.0" y1="76.0" x2="534.0" y2="76.0" stroke="#4B5563" stroke-width="2.5" stroke-dasharray="6 5"/>
+<text x="542.0" y="81.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">scraped or read by the collector</text>
+<line x1="786.0" y1="76.0" x2="824.0" y2="76.0" stroke="#93EAFF" stroke-width="3" />
+<text x="832.0" y="81.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">context that travels with the request</text>
+<text x="30.0" y="98.0" font-family="Arial, Helvetica, sans-serif" font-size="1" fill="#111827" font-weight="normal" text-anchor="start"></text>
+<rect x="30.0" y="104.0" width="248.0" height="164.0" rx="14" fill="#EEF6FF" stroke="none" stroke-width="1" />
+<text x="46.0" y="136.0" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#0086FF" font-weight="bold" text-anchor="start">Envoy Gateway</text>
+<text x="46.0" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">edge, port 80</text>
+<circle cx="52" cy="189" r="5.5" fill="#50B432"/>
+<text x="66.0" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">EnvoyProxy: spans as envoy</text>
+<circle cx="52" cy="219" r="5.5" fill="#0086FF"/>
+<text x="66.0" y="224.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">/stats scraped</text>
+<circle cx="52" cy="249" r="5.5" fill="#ED561B"/>
+<text x="66.0" y="254.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">JSON log with trace_id</text>
+<line x1="280.0" y1="148.0" x2="306.0" y2="148.0" stroke="#93EAFF" stroke-width="3" />
+<path d="M296.0 142.0L306.0 148.0L296.0 154.0z" fill="#93EAFF"/>
+<rect x="308.0" y="104.0" width="248.0" height="164.0" rx="14" fill="#EDFAFE" stroke="none" stroke-width="1" />
+<text x="324.0" y="136.0" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#058DC7" font-weight="bold" text-anchor="start">nginx</text>
+<text x="324.0" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">frontend, /api proxy</text>
+<circle cx="330" cy="189" r="5.5" fill="#ED561B"/>
+<text x="344.0" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">JSON log, request_id</text>
+<circle cx="330" cy="219" r="5.5" fill="#50B432"/>
+<text x="344.0" y="224.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">no spans; passes</text>
+<circle cx="330" cy="249" r="5.5" fill="#50B432"/>
+<text x="344.0" y="254.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">traceparent through</text>
+<line x1="558.0" y1="148.0" x2="584.0" y2="148.0" stroke="#93EAFF" stroke-width="3" />
+<path d="M574.0 142.0L584.0 148.0L574.0 154.0z" fill="#93EAFF"/>
+<rect x="586.0" y="104.0" width="248.0" height="164.0" rx="14" fill="#EEF6FF" stroke="none" stroke-width="1" />
+<text x="602.0" y="136.0" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#0086FF" font-weight="bold" text-anchor="start">FastAPI API</text>
+<text x="602.0" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">MRZ check, GenAI client</text>
+<circle cx="608" cy="189" r="5.5" fill="#50B432"/>
+<text x="622.0" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">OTel SDK: ocr.* spans</text>
+<circle cx="608" cy="219" r="5.5" fill="#0086FF"/>
+<text x="622.0" y="224.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">SDK + exemplars</text>
+<circle cx="608" cy="249" r="5.5" fill="#ED561B"/>
+<text x="622.0" y="254.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">JSON + OTLP, trace_id</text>
+<line x1="836.0" y1="148.0" x2="862.0" y2="148.0" stroke="#93EAFF" stroke-width="3" />
+<path d="M852.0 142.0L862.0 148.0L852.0 154.0z" fill="#93EAFF"/>
+<rect x="864.0" y="104.0" width="248.0" height="164.0" rx="14" fill="#EDFAFE" stroke="none" stroke-width="1" />
+<text x="880.0" y="136.0" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#058DC7" font-weight="bold" text-anchor="start">llm-d scheduler</text>
+<text x="880.0" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">EPP, picks the pod</text>
+<circle cx="886" cy="189" r="5.5" fill="#50B432"/>
+<text x="900.0" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">KServe tracing block</text>
+<circle cx="886" cy="219" r="5.5" fill="#0086FF"/>
+<text x="900.0" y="224.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">/metrics + bearer token</text>
+<circle cx="886" cy="249" r="5.5" fill="#ED561B"/>
+<text x="900.0" y="254.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">JSON with x-request-id</text>
+<line x1="1114.0" y1="148.0" x2="1140.0" y2="148.0" stroke="#93EAFF" stroke-width="3" />
+<path d="M1130.0 142.0L1140.0 148.0L1130.0 154.0z" fill="#93EAFF"/>
+<rect x="1142.0" y="104.0" width="248.0" height="164.0" rx="14" fill="#EEF6FF" stroke="none" stroke-width="1" />
+<text x="1158.0" y="136.0" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#0086FF" font-weight="bold" text-anchor="start">vLLM</text>
+<text x="1158.0" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">Qwen3.5-9B FP8</text>
+<circle cx="1164" cy="189" r="5.5" fill="#50B432"/>
+<text x="1178.0" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">--otlp-traces-endpoint</text>
+<circle cx="1164" cy="219" r="5.5" fill="#0086FF"/>
+<text x="1178.0" y="224.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">/metrics scraped</text>
+<circle cx="1164" cy="249" r="5.5" fill="#ED561B"/>
+<text x="1178.0" y="254.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">stdout: capacity, start-up</text>
+<line x1="1392.0" y1="148.0" x2="1418.0" y2="148.0" stroke="#93EAFF" stroke-width="3" />
+<path d="M1408.0 142.0L1418.0 148.0L1408.0 154.0z" fill="#93EAFF"/>
+<rect x="1420.0" y="104.0" width="248.0" height="164.0" rx="14" fill="#EDFAFE" stroke="none" stroke-width="1" />
+<text x="1436.0" y="136.0" font-family="Arial, Helvetica, sans-serif" font-size="19" fill="#058DC7" font-weight="bold" text-anchor="start">L40S GPU</text>
+<text x="1436.0" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">DCGM exporter</text>
+<circle cx="1442" cy="189" r="5.5" fill="#0086FF"/>
+<text x="1456.0" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">power, temp, clocks, XID</text>
+<circle cx="1442" cy="219" r="5.5" fill="#0086FF"/>
+<text x="1456.0" y="224.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">no SM activity here</text>
+<circle cx="1442" cy="249" r="5.5" fill="#0086FF"/>
+<text x="1456.0" y="254.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#111827" font-weight="normal" text-anchor="start">(profiling crashes it)</text>
+<text x="293.0" y="96.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="middle">traceparent</text>
+<text x="571.0" y="96.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="middle">X-Request-ID</text>
+<text x="849.0" y="96.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="middle">via Envoy</text>
+<text x="1127.0" y="96.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="middle">picks pod</text>
+<text x="1405.0" y="96.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#058DC7" font-weight="bold" text-anchor="middle">CUDA</text>
+<text x="30.0" y="290.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#4B5563" font-weight="normal" text-anchor="start">Visitor or k6  →  every hop adds its spans to the same trace; the API sends Envoy&#x27;s X-Request-ID on to the model, and vLLM names its request chatcmpl-&lt;that id&gt;.</text>
+<line x1="60.0" y1="302.0" x2="60.0" y2="332.0" stroke="#50B432" stroke-width="2.5" />
+<path d="M54.0 322.0L60.0 332.0L66.0 322.0z" fill="#50B432"/>
+<line x1="90.0" y1="302.0" x2="90.0" y2="332.0" stroke="#0086FF" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M84.0 322.0L90.0 332.0L96.0 322.0z" fill="#0086FF"/>
+<line x1="120.0" y1="302.0" x2="120.0" y2="332.0" stroke="#ED561B" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M114.0 322.0L120.0 332.0L126.0 322.0z" fill="#ED561B"/>
+<line x1="338.0" y1="302.0" x2="338.0" y2="332.0" stroke="#ED561B" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M332.0 322.0L338.0 332.0L344.0 322.0z" fill="#ED561B"/>
+<line x1="616.0" y1="302.0" x2="616.0" y2="332.0" stroke="#50B432" stroke-width="2.5" />
+<path d="M610.0 322.0L616.0 332.0L622.0 322.0z" fill="#50B432"/>
+<line x1="646.0" y1="302.0" x2="646.0" y2="332.0" stroke="#0086FF" stroke-width="2.5" />
+<path d="M640.0 322.0L646.0 332.0L652.0 322.0z" fill="#0086FF"/>
+<line x1="676.0" y1="302.0" x2="676.0" y2="332.0" stroke="#ED561B" stroke-width="2.5" />
+<path d="M670.0 322.0L676.0 332.0L682.0 322.0z" fill="#ED561B"/>
+<line x1="894.0" y1="302.0" x2="894.0" y2="332.0" stroke="#50B432" stroke-width="2.5" />
+<path d="M888.0 322.0L894.0 332.0L900.0 322.0z" fill="#50B432"/>
+<line x1="924.0" y1="302.0" x2="924.0" y2="332.0" stroke="#0086FF" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M918.0 322.0L924.0 332.0L930.0 322.0z" fill="#0086FF"/>
+<line x1="954.0" y1="302.0" x2="954.0" y2="332.0" stroke="#ED561B" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M948.0 322.0L954.0 332.0L960.0 322.0z" fill="#ED561B"/>
+<line x1="1172.0" y1="302.0" x2="1172.0" y2="332.0" stroke="#50B432" stroke-width="2.5" />
+<path d="M1166.0 322.0L1172.0 332.0L1178.0 322.0z" fill="#50B432"/>
+<line x1="1202.0" y1="302.0" x2="1202.0" y2="332.0" stroke="#0086FF" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M1196.0 322.0L1202.0 332.0L1208.0 322.0z" fill="#0086FF"/>
+<line x1="1232.0" y1="302.0" x2="1232.0" y2="332.0" stroke="#ED561B" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M1226.0 322.0L1232.0 332.0L1238.0 322.0z" fill="#ED561B"/>
+<line x1="1450.0" y1="302.0" x2="1450.0" y2="332.0" stroke="#0086FF" stroke-width="2.5" stroke-dasharray="6 5"/>
+<path d="M1444.0 322.0L1450.0 332.0L1456.0 322.0z" fill="#0086FF"/>
+<rect x="30.0" y="334.0" width="1640.0" height="236.0" rx="16" fill="#F6F8FA" stroke="#D0D7DE" stroke-width="1" />
+<text x="52.0" y="368.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#0086FF" font-weight="bold" text-anchor="start">OpenTelemetry Collector</text>
+<text x="320.0" y="367.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">DaemonSet, the only agent. Prometheus scrapes nothing; everything arrives here and leaves as OTLP.</text>
+<text x="52.0" y="400.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827" font-weight="bold" text-anchor="start">Receivers</text>
+<text x="410.0" y="400.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827" font-weight="bold" text-anchor="start">Processors, in order</text>
+<text x="1340.0" y="400.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827" font-weight="bold" text-anchor="start">Exporters</text>
+<text x="52.0" y="428.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">otlp  (gRPC 4317, HTTP 4318)</text>
+<text x="52.0" y="450.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">prometheus  (vLLM, EPP, Envoy, DCGM, KSM)</text>
+<text x="52.0" y="472.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">kubeletstats  (pod CPU, memory)</text>
+<text x="52.0" y="494.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">filelog  (pod logs)</text>
+<text x="52.0" y="516.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">k8sobjects  (events)</text>
+<text x="52.0" y="538.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">webhookevent  (Alertmanager)</text>
+<rect x="410.0" y="414.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="422.0" y="434.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">memory_limiter</text>
+<text x="422.0" y="452.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">back-pressure</text>
+<rect x="614.0" y="414.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="626.0" y="434.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">k8sattributes</text>
+<text x="626.0" y="452.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">pod, namespace, node</text>
+<rect x="818.0" y="414.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="830.0" y="434.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">redaction</text>
+<text x="830.0" y="452.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">fail-closed span keys</text>
+<rect x="1022.0" y="414.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="1034.0" y="434.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">transform/scrub</text>
+<text x="1034.0" y="452.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">MRZ, images, tokens</text>
+<rect x="410.0" y="470.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="422.0" y="490.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">mask_ips</text>
+<text x="422.0" y="508.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">visitor IP → /24</text>
+<rect x="614.0" y="470.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="626.0" y="490.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">cardinality</text>
+<text x="626.0" y="508.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">no IDs on metrics</text>
+<rect x="818.0" y="470.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="830.0" y="490.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">k8s_logs</text>
+<text x="830.0" y="508.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">name logs like spans</text>
+<rect x="1022.0" y="470.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="1034.0" y="490.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">tail_sampling</text>
+<text x="1034.0" y="508.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#4B5563" font-weight="normal" text-anchor="start">errors, &gt;25 s, 70 s wait</text>
+<rect x="1022.0" y="526.0" width="190.0" height="46.0" rx="8" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<text x="1034.0" y="546.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#058DC7" font-weight="bold" text-anchor="start">batch</text>
+<text x="1340.0" y="428.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#50B432" font-weight="bold" text-anchor="start">otlp → Tempo</text>
+<text x="1340.0" y="452.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#0086FF" font-weight="bold" text-anchor="start">otlphttp → Prometheus OTLP</text>
+<text x="1340.0" y="476.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#ED561B" font-weight="bold" text-anchor="start">otlphttp → Loki OTLP</text>
+<text x="1340.0" y="500.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">own metrics → Prometheus</text>
+<text x="1340.0" y="524.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#4B5563" font-weight="normal" text-anchor="start">(separate path, alerted on)</text>
+<text x="52.0" y="560.0" font-family="Arial, Helvetica, sans-serif" font-size="12.5" fill="#4B5563" font-weight="normal" text-anchor="start">Platform sources: kubelet, kube-state-metrics, Kubernetes events, Alertmanager.</text>
+<rect x="30.0" y="624.0" width="387.5" height="122.0" rx="14" fill="#FFFFFF" stroke="#0086FF" stroke-width="2" />
+<text x="48.0" y="656.0" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#0086FF" font-weight="bold" text-anchor="start">Prometheus</text>
+<text x="48.0" y="682.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">OTLP store, exemplars on</text>
+<text x="48.0" y="703.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">SLO, cost, cold-start rules</text>
+<text x="48.0" y="724.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">583 metric names</text>
+<rect x="447.5" y="624.0" width="387.5" height="122.0" rx="14" fill="#FFFFFF" stroke="#50B432" stroke-width="2" />
+<text x="465.5" y="656.0" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#50B432" font-weight="bold" text-anchor="start">Tempo</text>
+<text x="465.5" y="682.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">traces, 23 spans per request</text>
+<text x="465.5" y="703.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">metrics generator: service</text>
+<text x="465.5" y="724.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">graph and span metrics</text>
+<rect x="865.0" y="624.0" width="387.5" height="122.0" rx="14" fill="#FFFFFF" stroke="#ED561B" stroke-width="2" />
+<text x="883.0" y="656.0" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#ED561B" font-weight="bold" text-anchor="start">Loki</text>
+<text x="883.0" y="682.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">10 log sources incl. alerts</text>
+<text x="883.0" y="703.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">trace_id in API and Envoy</text>
+<text x="883.0" y="724.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">lines; IPs masked</text>
+<rect x="1282.5" y="624.0" width="387.5" height="122.0" rx="14" fill="#FFFFFF" stroke="#058DC7" stroke-width="2" />
+<text x="1300.5" y="656.0" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#058DC7" font-weight="bold" text-anchor="start">Alertmanager</text>
+<text x="1300.5" y="682.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">fed by Prometheus rules</text>
+<text x="1300.5" y="703.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">alerts → collector → Loki</text>
+<text x="1300.5" y="724.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">(no pager configured)</text>
+<line x1="641.2" y1="570.0" x2="641.2" y2="622.0" stroke="#50B432" stroke-width="3" />
+<path d="M635.2 612.0L641.2 622.0L647.2 612.0z" fill="#50B432"/>
+<line x1="223.8" y1="570.0" x2="223.8" y2="622.0" stroke="#0086FF" stroke-width="3" />
+<path d="M217.8 612.0L223.8 622.0L229.8 612.0z" fill="#0086FF"/>
+<line x1="1058.8" y1="570.0" x2="1058.8" y2="622.0" stroke="#ED561B" stroke-width="3" />
+<path d="M1052.8 612.0L1058.8 622.0L1064.8 612.0z" fill="#ED561B"/>
+<rect x="30.0" y="776.0" width="1640.0" height="64.0" rx="14" fill="#EEF6FF" stroke="none" stroke-width="1" />
+<text x="52.0" y="816.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#0086FF" font-weight="bold" text-anchor="start">Grafana</text>
+<text x="170.0" y="815.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#111827" font-weight="normal" text-anchor="start">7 dashboards as code: SLOs and quality · Request journey · Inference · GPU · Routing · Cold start · Cost.  Tunnel only.</text>
+<text x="30.0" y="888.0" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#111827" font-weight="bold" text-anchor="start">How the signals join up</text>
+<rect x="30.0" y="906.0" width="533.3" height="100.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<rect x="30.0" y="906.0" width="6.0" height="100.0" rx="3" fill="#93EAFF" stroke="none" stroke-width="1" />
+<text x="52.0" y="938.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#058DC7" font-weight="bold" text-anchor="start">traceparent</text>
+<text x="52.0" y="964.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">W3C trace context through Envoy, nginx, HTTPX, Envoy, llm-d and</text>
+<text x="52.0" y="984.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">vLLM: one trace, four services.</text>
+<rect x="583.3" y="906.0" width="533.3" height="100.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<rect x="583.3" y="906.0" width="6.0" height="100.0" rx="3" fill="#93EAFF" stroke="none" stroke-width="1" />
+<text x="605.3" y="938.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#058DC7" font-weight="bold" text-anchor="start">X-Request-ID</text>
+<text x="605.3" y="964.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">One ID in Envoy (both hops), nginx, the API, llm-d&#x27;s logs and</text>
+<text x="605.3" y="984.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">vLLM&#x27;s chatcmpl-&lt;id&gt;.</text>
+<rect x="1136.7" y="906.0" width="533.3" height="100.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<rect x="1136.7" y="906.0" width="6.0" height="100.0" rx="3" fill="#93EAFF" stroke="none" stroke-width="1" />
+<text x="1158.7" y="938.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#058DC7" font-weight="bold" text-anchor="start">Exemplars</text>
+<text x="1158.7" y="964.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">A dot on the latency histogram carries the trace_id of the</text>
+<text x="1158.7" y="984.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">request it measured.</text>
+<rect x="30.0" y="1020.0" width="533.3" height="100.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<rect x="30.0" y="1020.0" width="6.0" height="100.0" rx="3" fill="#93EAFF" stroke="none" stroke-width="1" />
+<text x="52.0" y="1052.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#058DC7" font-weight="bold" text-anchor="start">trace_id in logs</text>
+<text x="52.0" y="1078.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">Span → its log lines: exact for API and Envoy, by time window</text>
+<text x="52.0" y="1098.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">for vLLM and llm-d.</text>
+<rect x="583.3" y="1020.0" width="533.3" height="100.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<rect x="583.3" y="1020.0" width="6.0" height="100.0" rx="3" fill="#93EAFF" stroke="none" stroke-width="1" />
+<text x="605.3" y="1052.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#058DC7" font-weight="bold" text-anchor="start">Resource attributes</text>
+<text x="605.3" y="1078.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">service.name and k8s.pod.name are the join keys between</text>
+<text x="605.3" y="1098.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">metrics, spans and logs.</text>
+<rect x="1136.7" y="1020.0" width="533.3" height="100.0" rx="12" fill="#FFFFFF" stroke="#D0D7DE" stroke-width="1" />
+<rect x="1136.7" y="1020.0" width="6.0" height="100.0" rx="3" fill="#93EAFF" stroke="none" stroke-width="1" />
+<text x="1158.7" y="1052.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#058DC7" font-weight="bold" text-anchor="start">Traces → metrics</text>
+<text x="1158.7" y="1078.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">From any span, Grafana shows queue p95, KV cache and GPU power</text>
+<text x="1158.7" y="1098.0" font-family="Arial, Helvetica, sans-serif" font-size="13.5" fill="#111827" font-weight="normal" text-anchor="start">for that minute.</text>
+</svg>
