@@ -14,7 +14,7 @@ extraEnv:
   - name: DCGM_EXPORTER_INTERVAL
     value: "5000"
 # The default counters include profiling fields, which crash the exporter on the
-# Nebius VM; see charts/observability/files/dcgm/counters.csv.
+# lab's cloud VM; see charts/observability/files/dcgm/counters.csv.
 extraConfigMapVolumes:
   - name: exporter-metrics-volume
     configMap:

@@ -27,7 +27,7 @@ model:
 # again. KServe's own hf:// download goes to a volume that dies with the pod (and
 # its 1Gi memory limit gets it OOMKilled). Here the fetch-weights init container
 # downloads only what is missing, and vLLM mounts the result through pvc://.
-# On Nebius hostPath is a disk that also survives deleting the VM (infra/nebius).
+# Put hostPath on a separate disk and the weights survive deleting the VM.
 weights:
   hostPath: /var/lib/ocr-lab-models
   subPath: qwen3.5-9b-fp8

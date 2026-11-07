@@ -1,11 +1,11 @@
 """Send every passport in a folder once, N at a time, and keep each response.  python3 batch.py DIR N OUT.json"""
-import concurrent.futures as cf, glob, json, subprocess, sys, time
+import os, concurrent.futures as cf, glob, json, subprocess, sys, time
 d, n, out = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 files = sorted(glob.glob(d + "/*.png"))
 def one(f):
     t = time.time()
     r = subprocess.run(["curl", "-s", "-m", "180", "-w", "\n%{http_code}", "-F", f"file=@{f};type=image/png",
-                        "http://localhost/api/extract"], capture_output=True, text=True).stdout
+                        os.environ.get("OCR_LAB_URL", "http://localhost") + "/api/extract"], capture_output=True, text=True).stdout
     body, code = r.rsplit("\n", 1)
     try: body = json.loads(body)
     except Exception: pass

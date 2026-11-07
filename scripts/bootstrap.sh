@@ -33,7 +33,7 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
 fi
 
 # 3. nvidia-container-toolkit (must be installed BEFORE K3s). GPU images such as
-#    Nebius's ubuntu24.04-cuda13.0 ship a version newer than NVIDIA's stable repo,
+#    cloud ubuntu24.04 + CUDA 13.0 images ship a version newer than NVIDIA's stable repo,
 #    where installing from that repo would be a refused downgrade.
 if ! command -v nvidia-ctk >/dev/null 2>&1; then
   curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
@@ -46,7 +46,7 @@ if ! command -v nvidia-ctk >/dev/null 2>&1; then
 fi
 
 # Model weights (charts/model-llmd weights.hostPath), writable by the download
-# container's UID. On Nebius a persistent disk is already mounted here.
+# container's UID. Mount a persistent disk here to keep the weights across VMs.
 install -d -o 1000 -g 1000 /var/lib/ocr-lab-models
 
 # 4. Pin the kernel. The TensorDock NVIDIA-570 image ships the driver via

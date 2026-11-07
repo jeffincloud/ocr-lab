@@ -1,4 +1,4 @@
-import subprocess, threading, time, glob, itertools, sys, collections, json
+import os, subprocess, threading, time, glob, itertools, sys, collections, json
 imgs = sorted(glob.glob(sys.argv[1] + "/*.png")); it = itertools.cycle(imgs); lock = threading.Lock()
 def run(n, dur):
     codes = collections.Counter(); lat = []; stop = time.time() + dur
@@ -7,7 +7,7 @@ def run(n, dur):
             with lock: f = next(it)
             t = time.time()
             c = subprocess.run(["curl", "-s", "-o", "/dev/null", "-m", "150", "-w", "%{http_code}", "-F", f"file=@{f};type=image/png",
-                                "http://localhost/api/extract"], capture_output=True, text=True).stdout
+                                os.environ.get("OCR_LAB_URL", "http://localhost") + "/api/extract"], capture_output=True, text=True).stdout
             with lock: codes[c] += 1; lat.append((c, time.time() - t))
     ts = [threading.Thread(target=w) for _ in range(n)]; start = time.time()
     [t.start() for t in ts]; [t.join() for t in ts]

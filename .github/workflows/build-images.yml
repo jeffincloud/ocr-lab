@@ -1,10 +1,10 @@
 name: build-images
 
 # Publishes the lab's images to GHCR, tagged with VERSION and the commit SHA. The GPU
-# VM pulls them, so they have to exist before `infra/nebius` can rebuild it.
+# VM pulls them, so they have to exist before the VM is rebuilt.
 on:
   push:
-    branches: [main, "claude/**"]
+    branches: [main, instrumentation, "claude/**"]
     paths:
       - "apps/api/**"
       - "apps/frontend/**"

@@ -1,4 +1,4 @@
-import subprocess, threading, time, glob, itertools, sys, collections
+import os, subprocess, threading, time, glob, itertools, sys, collections
 imgs = sorted(glob.glob(sys.argv[1] + "/*.png")); it = itertools.cycle(imgs); lock = threading.Lock()
 stages = [(2, 75), (6, 75), (12, 75), (24, 90)]
 codes = collections.Counter(); stop_at = [0]
@@ -6,7 +6,7 @@ def worker():
     while time.time() < stop_at[0]:
         with lock: f = next(it)
         out = subprocess.run(["curl", "-s", "-o", "/dev/null", "-m", "150", "-w", "%{http_code}", "-F", f"file=@{f};type=image/png",
-                              "http://localhost/api/extract"], capture_output=True, text=True).stdout
+                              os.environ.get("OCR_LAB_URL", "http://localhost") + "/api/extract"], capture_output=True, text=True).stdout
         with lock: codes[out] += 1
 start = time.time(); print("start", int(start), flush=True); threads = []
 for n, dur in stages:

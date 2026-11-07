@@ -101,8 +101,8 @@ scrape:
 
 # Prices behind the cost-per-request panels. Set them to what you actually pay.
 pricing:
-  # Hourly price of the GPU instance, all-in. 0.87 is the preemptible Nebius L40S
-  # (gpu-l40s-a, 1gpu-16vcpu-64gb) this lab runs on.
+  # Hourly price of the GPU instance, all-in. 0.87 is what the lab's preemptible
+  # L40S VM (16 vCPU, 64 GB) cost per hour.
   gpuHourlyUsd: 0.87
   # Hosted-API prices per million tokens, keyed by the model name the API reports
   # (gen_ai.request.model). Add the model you compare against.
