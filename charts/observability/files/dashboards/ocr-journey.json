@@ -88,7 +88,7 @@
           "queryType": "traceql",
           "limit": 20,
           "refId": "A",
-          "query": "{resource.service.name=\"ocr-api\" && span.http.route=\"/extract\"} | select(span.ocr.outcome) | duration > 3s"
+          "query": "{resource.service.name=\"ocr-api\" && span.http.route=\"/extract\" && duration > 3s} | select(span.ocr.outcome)"
         }
       ],
       "id": 3,

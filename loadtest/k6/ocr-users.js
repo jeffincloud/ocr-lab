@@ -13,6 +13,8 @@
 //           uploads (people reading results). "Many users at once".
 //   minute  The users shape in one minute: ramp, hold PEAK_USERS, ramp down. A quick
 //           burst of traffic to watch on the dashboards.
+//   wave    Five minutes of changing load for recordings: users rise and fall
+//           through a range (peak = PEAK_USERS) so every panel moves.
 //   rate    Open model: arrival rate climbs in steps up to MAX_RPS. Finds the
 //           knee where queue time and latency take off. Use for capacity.
 //   spike   Arrival rate jumps from 1 to SPIKE_RPS in 10 s, holds, drops.
@@ -39,7 +41,8 @@ const SPIKE_RPS = parseInt(__ENV.SPIKE_RPS || '30');
 const SOAK_RPS = parseFloat(__ENV.SOAK_RPS || '5');
 const SOAK_MINUTES = parseInt(__ENV.SOAK_MINUTES || '60');
 // Log the trace ID of any request slower than this, to jump straight to Tempo.
-const SLOW_MS = parseInt(__ENV.SLOW_MS || '8000');
+// Same 25 s as the latency SLO and the collector's "slow" tail-sampling rule.
+const SLOW_MS = parseInt(__ENV.SLOW_MS || '25000');
 
 const FIELDS = ['surname', 'given_names', 'passport_number', 'nationality', 'date_of_birth', 'sex',
   'date_of_issue', 'date_of_expiry', 'issuing_authority'];
@@ -86,6 +89,24 @@ const SCENARIOS = {
     ],
     gracefulRampDown: '60s',
   },
+  wave: {
+    executor: 'ramping-vus',
+    startVUs: 1,
+    // 300 s in all: climb, spike, drop, recover, fade out.
+    stages: [
+      { duration: '30s', target: Math.ceil(PEAK_USERS / 6) },
+      { duration: '30s', target: Math.ceil(PEAK_USERS / 2) },
+      { duration: '20s', target: PEAK_USERS },
+      { duration: '40s', target: PEAK_USERS },
+      { duration: '30s', target: Math.ceil(PEAK_USERS / 4) },
+      { duration: '30s', target: Math.ceil(PEAK_USERS / 4) },
+      { duration: '30s', target: Math.ceil((PEAK_USERS * 3) / 4) },
+      { duration: '40s', target: Math.ceil((PEAK_USERS * 3) / 4) },
+      { duration: '30s', target: Math.max(1, Math.ceil(PEAK_USERS / 12)) },
+      { duration: '20s', target: 0 },
+    ],
+    gracefulRampDown: '60s',
+  },
   rate: {
     executor: 'ramping-arrival-rate',
     startRate: 1,
@@ -121,14 +142,20 @@ const SCENARIOS = {
   },
 };
 
-// Thresholds mirror the SLOs in observability/slo/ so a run "passes" exactly
-// when it would have kept the SLOs. They report; they don't abort the run.
+// Thresholds mirror the SLOs in observability/slo/slos.yaml, so a run "passes"
+// when it would have kept them. They report; they don't abort the run. Keep the
+// two in step when an objective changes. k6 measures at the client, so its
+// latency includes the network that the API-side SLO doesn't see.
 export const options = {
   scenarios: { [SCENARIO]: SCENARIOS[SCENARIO] },
   thresholds: {
+    // ocr-availability: 99.5% of requests don't fail.
     'http_req_failed': ['rate<0.005'],
-    'http_req_duration{expected_response:true}': ['p(95)<8000'],
-    'ocr_mrz_valid': ['rate>0.98'],
+    // ocr-latency: 95% of successful extractions within 25 s (thinking on).
+    'http_req_duration{expected_response:true}': ['p(95)<25000'],
+    // ocr-mrz-validity: 75% of answers pass the MRZ check digits.
+    'ocr_mrz_valid': ['rate>0.75'],
+    // Ground truth, which only a load test has: no SLO, same bar as ocr-visual-agreement (97%).
     'ocr_field_correct': ['rate>0.97'],
   },
   summaryTrendStats: ['avg', 'p(50)', 'p(90)', 'p(95)', 'p(99)', 'max'],
@@ -139,6 +166,12 @@ function hex(bytes) {
   let s = '';
   for (let i = 0; i < bytes; i++) s += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
   return s;
+}
+
+function uuid4() {
+  const h = hex(16);
+  const variant = ((parseInt(h[16], 16) & 0x3) | 0x8).toString(16);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
 function norm(v) {
@@ -162,10 +195,15 @@ async function readImage(name) {
 export default async function () {
   const rec = manifest[Math.floor(Math.random() * manifest.length)];
   const body = await readImage(rec.file);
-  // Start the trace here so Tempo shows the client's view as the root.
-  const traceId = hex(16);
+  // Send a request ID, not a traceparent: k6 can't export spans, so a parent it
+  // invented would never arrive and every trace would sit in Tempo as "<root span
+  // not yet received>". Envoy starts the trace instead and keeps this ID
+  // (PreserveOrGenerate), which every log line, the API span and vLLM carry.
+  // It must be a UUID: Envoy records its sampling decision inside the UUID, and
+  // a request whose ID isn't one is never traced (checked 8 Nov 2026).
+  const requestId = uuid4();
   const res = http.post(`${BASE_URL}${EXTRACT_PATH}`, { file: http.file(body, rec.file, 'image/png') }, {
-    headers: { traceparent: `00-${traceId}-${hex(8)}-01` },
+    headers: { 'X-Request-ID': requestId },
     timeout: '180s',
     tags: { name: 'extract' },
   });
@@ -173,7 +211,11 @@ export default async function () {
 
   const ok = check(res, { 'status 200': (r) => r.status === 200 });
   if (res.timings.duration > SLOW_MS || !ok) {
-    console.warn(`slow_or_failed status=${res.status} ms=${Math.round(res.timings.duration)} trace_id=${traceId}`);
+    // Log the ID the app echoes back: Envoy rewrites one digit of the UUID to mark
+    // the request as traced, so it differs from the one sent.
+    // Tempo: {span.ocr.request_id="<id>"}   Loki: {service_name=~".+"} |= "<id>"
+    const rid = res.headers['X-Request-Id'] || requestId;
+    console.warn(`slow_or_failed status=${res.status} ms=${Math.round(res.timings.duration)} request_id=${rid}`);
   }
   if (ok) {
     const data = res.json();
@@ -189,7 +231,7 @@ export default async function () {
     if (data.usage?.output_tokens) outputTokens.add(data.usage.output_tokens);
   }
 
-  if (SCENARIO === 'users' || SCENARIO === 'smoke' || SCENARIO === 'minute') {
+  if (SCENARIO === 'users' || SCENARIO === 'smoke' || SCENARIO === 'minute' || SCENARIO === 'wave') {
     sleep(1 + Math.random() * 4); // think time; arrival-rate scenarios pace themselves
   }
 }

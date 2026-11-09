@@ -205,8 +205,8 @@ def journey_board():
            "targets": [{"datasource": TEMPO, "queryType": "serviceMap", "refId": "A"}]}, 12, 10)
     b.add({"type": "table", "title": "Slowest recent traces (click to open)", "datasource": TEMPO,
            "targets": [{"datasource": TEMPO, "queryType": "traceql", "limit": 20, "refId": "A",
-                        "query": '{resource.service.name="ocr-api" && span.http.route="/extract"} | select(span.ocr.outcome) '
-                                 '| duration > 3s'}]}, 12, 10)
+                        "query": '{resource.service.name="ocr-api" && span.http.route="/extract" && duration > 3s} '
+                                 '| select(span.ocr.outcome)'}]}, 12, 10)
 
     b.row("API stages")
     b.add(ts("Mean time per API stage", [(

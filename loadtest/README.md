@@ -34,12 +34,14 @@ k6 run -e BASE_URL=http://<host>/api -e SCENARIO=users -e PEAK_USERS=100 loadtes
 | `smoke` | 1 user, 1 min | sanity check |
 | `users` | closed: ramps to `PEAK_USERS`, 1–5 s think time | "many users at once" |
 | `minute` | closed: the same shape in one minute | a quick burst to watch on the dashboards |
+| `wave` | closed: 5 min, users rise and fall (1/6 → 1/2 → peak → 1/4 → 3/4 → 1/12 of `PEAK_USERS`) | recordings: every panel moves |
 | `rate` | open: steps up to `MAX_RPS` | find the knee |
 | `spike` | open: 1 → `SPIKE_RPS` in 10 s | queueing, timeouts, burn-rate alerts |
 | `soak` | open: `SOAK_RPS` for `SOAK_MINUTES` | throttling, leaks, budget burn |
 
 Thresholds mirror the SLOs. Custom metrics: `ocr_field_correct`, `ocr_exact_match`, `ocr_mrz_valid`,
-token trends. Slow or failed requests are logged with their `trace_id` (k6 starts the trace).
+token trends. Slow or failed requests are logged with their `request_id`; find the trace in Tempo with
+`{span.ocr.request_id="<id>"}`. Envoy starts each trace (k6 sends only `X-Request-ID`).
 To see runs on the dashboards, send k6 metrics to Prometheus:
 
 ```bash
